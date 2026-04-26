@@ -4,6 +4,7 @@ import type {
   FetchResult,
   NormalizedModuleOptions,
   PayloadTypes,
+  PerformancePayload,
   ServerPayload,
   ViewPayload,
 } from '../types';
@@ -38,6 +39,7 @@ function normalizeConfig(options: ModuleOptions = {}): NormalizedModuleOptions {
     useDirective = false,
     logErrors = false,
     enabled = true,
+    performance = false,
     tag = undefined,
     excludeQueryParams = false,
     trailingSlash = 'any',
@@ -82,6 +84,7 @@ function normalizeConfig(options: ModuleOptions = {}): NormalizedModuleOptions {
     autoTrack: autoTrack !== false,
     useDirective: useDirective === true,
     logErrors: logErrors === true,
+    performance: performance === true,
     enabled: enabled !== false,
   };
 }
@@ -119,7 +122,7 @@ const validatorFns = {
 } as const;
 
 type PropertyValidator = keyof typeof validatorFns;
-type Payload = ViewPayload & EventPayload;
+type Payload = ViewPayload & EventPayload & { id?: string };
 
 const _payloadProps: Record<keyof Payload, PropertyValidator> = {
   hostname: 'nonempty',
@@ -131,9 +134,10 @@ const _payloadProps: Record<keyof Payload, PropertyValidator> = {
   tag: 'skip', // optional property
   name: 'skip', // optional, 'nonempty' in EventPayload
   data: 'skip', // optional, 'data' in EventPayload & IdentifyPayload
+  id: 'skip', // optional, distinct user ID in IdentifyPayload (Umami v2.18.0+)
 } as const;
 
-const _payloadType: PayloadTypes = ['event', 'identify'];
+const _payloadType: PayloadTypes = ['event', 'identify', 'performance'];
 const _bodyProps: Array<keyof ServerPayload> = ['cache', 'payload', 'type'];
 
 function isValidPayload(obj: object): obj is Payload {
@@ -171,6 +175,12 @@ function isValidPayload(obj: object): obj is Payload {
     validators.tag = 'string';
   }
 
+  // optional distinct user ID (umIdentify with id, Umami v2.18.0+)
+  if (objKeys.includes('id')) {
+    validatorKeys.push('id');
+    validators.id = 'nonempty';
+  }
+
   // check: all keys are present, no more, no less
   if (
     objKeys.length !== validatorKeys.length
@@ -190,6 +200,19 @@ function isValidPayload(obj: object): obj is Payload {
   return true;
 }
 
+const _perfNumericKeys = ['ttfb', 'fcp', 'lcp', 'cls', 'inp', 'duration'] as const;
+
+function isValidPerformancePayload(obj: object): obj is PerformancePayload {
+  if (!isRecord(obj))
+    return false;
+  const required: string[] = ['hostname', 'language', 'screen', 'url', ..._perfNumericKeys];
+  return (
+    required.every(k => k in obj)
+    && _perfNumericKeys.every(k => typeof (obj as Record<string, unknown>)[k] === 'number')
+    && isValidString((obj as Record<string, unknown>).hostname)
+  );
+}
+
 type ValidatePayloadReturn =
   | { success: true; output: ServerPayload }
   | { success: false; output: unknown };
@@ -200,11 +223,12 @@ function parseEventBody(body: unknown): ValidatePayloadReturn {
     output: body,
   } satisfies ValidatePayloadReturn;
 
-  // check: is record, no extra keys
-  if (!isRecord(body) || Object.keys(body).length !== _bodyProps.length)
+  // check: is record and all required top-level properties are present
+  // (intentionally not checking for extra keys so forward-compatible with
+  // future Umami API additions)
+  if (!isRecord(body))
     return error;
 
-  // check: top-level properties
   if (!(
     'type' in body && isValidString(body.type)
     && 'cache' in body && typeof body.cache === 'string'
@@ -218,7 +242,12 @@ function parseEventBody(body: unknown): ValidatePayloadReturn {
   if (!includes(_payloadType, type))
     return error;
 
-  // check: body.payload is valid
+  if (type === 'performance') {
+    if (!isValidPerformancePayload(payload))
+      return error;
+    return { success: true, output: { type, cache, payload } };
+  }
+
   if (!isValidPayload(payload))
     return error;
 

@@ -4,17 +4,21 @@ import type {
   EventPayload,
   FetchResult,
   IdentifyPayload,
+  PerformancePayload,
   PreflightResult,
   StaticPayload,
   ViewPayload,
 } from '../types';
-import { buildPathUrl, collect, config, logger } from '#build/umami.config.mjs';
+import { buildPathUrl, collect } from '#build/umami.config.mjs';
+import { useRuntimeConfig } from '#imports';
+import { logger } from './logger';
 import { earlyPromise, flattenObject, isValidString } from './utils';
 
 let configChecks: PreflightResult | undefined;
 let staticPayload: StaticPayload | undefined;
 let queryRef: string | undefined;
-let identity: string | undefined;
+let queryRefConsumed = false;
+let identifyId: string | undefined;
 
 function runPreflight(): PreflightResult {
   if (typeof window === 'undefined')
@@ -28,7 +32,7 @@ function runPreflight(): PreflightResult {
     return configChecks;
 
   configChecks = (function (): PreflightResult {
-    const { ignoreLocalhost, domains } = config;
+    const { ignoreLocalhost, domains } = useRuntimeConfig().public.umami;
     const hostname = window.location.hostname;
 
     if (ignoreLocalhost && hostname === 'localhost')
@@ -53,7 +57,7 @@ function getStaticPayload(): StaticPayload {
     navigator: { language },
   } = window;
 
-  const { tag } = config;
+  const { tag } = useRuntimeConfig().public.umami;
 
   staticPayload = {
     hostname,
@@ -66,13 +70,23 @@ function getStaticPayload(): StaticPayload {
 }
 
 function getQueryRef(): string {
-  if (typeof queryRef === 'string')
-    return queryRef;
+  // Only read and use the URL referral param once (on the landing page).
+  // After the first pageview is tracked, reset it so subsequent SPA
+  // navigations don't keep attributing all views to the original referrer.
+  if (queryRefConsumed)
+    return '';
 
-  const params = new URL(window.location.href).searchParams;
-  queryRef = params.get('referrer') || params.get('ref') || '';
+  if (typeof queryRef !== 'string') {
+    const params = new URL(window.location.href).searchParams;
+    queryRef = params.get('referrer') || params.get('ref') || '';
+  }
 
   return queryRef;
+}
+
+function consumeQueryRef(): void {
+  queryRefConsumed = true;
+  queryRef = '';
 }
 
 function getPayload(): ViewPayload {
@@ -86,6 +100,9 @@ function getPayload(): ViewPayload {
   return {
     ...getStaticPayload(),
     ...(tag ? { tag } : null),
+    // Auto-include the distinct ID on all payloads after umIdentify is called,
+    // matching the behaviour of the official Umami tracker script.
+    ...(identifyId ? { id: identifyId } : null),
     url,
     title,
     referrer: ref,
@@ -113,7 +130,7 @@ function umTrackView(path?: string, referrer?: string): FetchResult {
 
   const url = buildPathUrl(isValidString(path) ? path : null);
 
-  return collect({
+  const result = collect({
     type: 'event',
     payload: {
       ...getPayload(),
@@ -121,6 +138,12 @@ function umTrackView(path?: string, referrer?: string): FetchResult {
       ...(isValidString(referrer) && { referrer }),
     } satisfies ViewPayload,
   });
+
+  // Consume the landing-page URL referral param after the first tracked view
+  // so subsequent SPA navigations don't keep attributing to the same referrer.
+  consumeQueryRef();
+
+  return result;
 }
 
 /**
@@ -148,6 +171,12 @@ function umTrackEvent(eventName: string, eventData?: EventData): FetchResult {
     logger('event-name');
     name = '#unknown-event';
   }
+  else if (eventName.length > 50) {
+    // Umami silently truncates names server-side; warn the developer and
+    // truncate here so what we log matches what Umami actually records.
+    logger('event-name-length');
+    name = eventName.slice(0, 50);
+  }
 
   return collect({
     type: 'event',
@@ -160,26 +189,29 @@ function umTrackEvent(eventName: string, eventData?: EventData): FetchResult {
 }
 
 /**
- * Save data about the current session with optional distinct user ID.
+ * Save data about the current session and optionally identify the user.
  *
- * Umami supports saving session data and identifying users with a distinct ID.
+ * Supports three call signatures matching the official Umami tracker:
+ * - `umIdentify(uniqueId)` — set a distinct user ID (Umami v2.18.0+)
+ * - `umIdentify(uniqueId, sessionData)` — set ID and session data together
+ * - `umIdentify(sessionData)` — set session data only (original behaviour)
+ *
+ * The distinct ID is stored in a module-level closure and automatically
+ * included in all subsequent event and pageview payloads, matching the
+ * behaviour of the official Umami tracker script.
+ *
  * @see [v2.13.0 release](https://github.com/umami-software/umami/releases/tag/v2.13.0)
- * @see [v2.18.0 distinct IDs](https://github.com/umami-software/umami/releases/tag/v2.18.0)
+ * @see [Umami Docs — Identify](https://umami.is/docs/tracker-functions)
  *
- * @param idOrData distinct user ID (string) or session data object
- * @param sessionData optional session data when first param is a distinct ID
- *
- * @example
- * // ID only
- * umIdentify('user@example.com')
- *
- * // ID with data
- * umIdentify('user@example.com', { name: 'John', plan: 'pro' })
- *
- * // Data only (backward compatible)
- * umIdentify({ name: 'John', plan: 'pro' })
+ * @param uniqueIdOrData distinct user ID string (max 50 chars) **or** session data object
+ * @param sessionData session data when first arg is a distinct ID
  */
-function umIdentify(idOrData?: string | EventData, sessionData?: EventData): FetchResult {
+function umIdentify(uniqueId: string, sessionData?: EventData): FetchResult;
+function umIdentify(sessionData?: EventData): FetchResult;
+function umIdentify(
+  uniqueIdOrData?: string | EventData,
+  sessionData?: EventData,
+): FetchResult {
   const check = runPreflight();
 
   if (check === 'ssr')
@@ -190,26 +222,30 @@ function umIdentify(idOrData?: string | EventData, sessionData?: EventData): Fet
     return earlyPromise(false);
   }
 
-  // Parse arguments to support flexible signatures
   let id: string | undefined;
-  let data: Record<string, unknown> | undefined;
+  let data: ReturnType<typeof flattenObject>;
 
-  if (typeof idOrData === 'string') {
-    // umIdentify(id) or umIdentify(id, data)
-    id = idOrData;
-    identity = idOrData; // Store for subsequent events
+  if (typeof uniqueIdOrData === 'string') {
+    // umIdentify(uniqueId) or umIdentify(uniqueId, sessionData)
+    id = uniqueIdOrData.trim().slice(0, 50) || undefined;
     data = flattenObject(sessionData);
-  } else {
-    // umIdentify(data) - backward compatible
-    data = flattenObject(idOrData);
   }
+  else {
+    // umIdentify(sessionData) — original behaviour
+    data = flattenObject(uniqueIdOrData ?? undefined);
+  }
+
+  // Persist the distinct ID so all subsequent tracking calls include it,
+  // matching the official Umami tracker script's identify() behaviour.
+  if (id)
+    identifyId = id;
 
   return collect({
     type: 'identify',
     payload: {
       ...getPayload(),
-      ...(id && { id }),
-      ...(data && { data }),
+      ...(id ? { id } : null),
+      ...(data ? { data } : null),
     } satisfies IdentifyPayload,
   });
 }
@@ -239,8 +275,8 @@ function umTrackRevenue(
 
   let $cur: string | null = null;
 
-  if (typeof currency === 'string' && /^[A-Z]{3}$/i.test(currency.trim()))
-    $cur = currency.trim();
+  if (typeof currency === 'string' && /^[A-Z]{3}$/.test(currency.trim().toUpperCase()))
+    $cur = currency.trim().toUpperCase();
   else
     logger('currency', `Got: ${currency}`);
 
@@ -250,4 +286,107 @@ function umTrackRevenue(
   });
 }
 
-export { umIdentify, umTrackEvent, umTrackRevenue, umTrackView };
+function startPerformanceTracking(): () => void {
+  if (typeof window === 'undefined' || typeof PerformanceObserver === 'undefined')
+    return () => {};
+
+  if (runPreflight() !== true)
+    return () => {};
+
+  const t0 = performance.now();
+  let flushed = false;
+  const metrics = { ttfb: 0, fcp: 0, lcp: 0, cls: 0, inp: 0 };
+
+  // TTFB from Navigation Timing API
+  const [nav] = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+  if (nav) {
+    const activationStart = (nav as PerformanceNavigationTiming & { activationStart?: number }).activationStart ?? 0;
+    metrics.ttfb = Math.max(nav.responseStart - activationStart, 0);
+  }
+
+  const observers: PerformanceObserver[] = [];
+
+  function observe(type: string, cb: PerformanceObserverCallback, extra?: Record<string, unknown>) {
+    try {
+      const obs = new PerformanceObserver(cb);
+      obs.observe({ type, buffered: true, ...extra } as PerformanceObserverInit);
+      observers.push(obs);
+    }
+    catch { /* entry type unsupported in this browser */ }
+  }
+
+  observe('paint', (list) => {
+    const entry = list.getEntriesByName('first-contentful-paint')[0];
+    if (entry)
+      metrics.fcp = entry.startTime;
+  });
+
+  observe('largest-contentful-paint', (list) => {
+    const entries = list.getEntries();
+    if (entries.length)
+      metrics.lcp = entries.at(-1)!.startTime;
+  });
+
+  let clsSession = 0;
+  let clsSessionStart = -1;
+  observe('layout-shift', (list) => {
+    for (const e of list.getEntries() as (PerformanceEntry & { hadRecentInput: boolean; value: number })[]) {
+      if (e.hadRecentInput)
+        continue;
+      if (clsSessionStart >= 0 && e.startTime - clsSessionStart < 1000)
+        clsSession += e.value;
+      else
+        clsSession = e.value;
+      clsSessionStart = e.startTime;
+      if (clsSession > metrics.cls)
+        metrics.cls = clsSession;
+    }
+  });
+
+  observe('event', (list) => {
+    for (const e of list.getEntries()) {
+      if (e.duration > metrics.inp)
+        metrics.inp = e.duration;
+    }
+  }, { durationThreshold: 40 });
+
+  let timer: ReturnType<typeof setTimeout>;
+
+  function onHide() {
+    if (document.visibilityState === 'hidden')
+      flush();
+  }
+
+  function flush() {
+    if (flushed)
+      return;
+    flushed = true;
+    clearTimeout(timer);
+    document.removeEventListener('visibilitychange', onHide);
+    for (const obs of observers) {
+      try {
+        obs.disconnect();
+      }
+      catch {}
+    }
+
+    collect({
+      type: 'performance',
+      payload: {
+        ...getPayload(),
+        ttfb: metrics.ttfb,
+        fcp: metrics.fcp,
+        lcp: metrics.lcp,
+        cls: metrics.cls,
+        inp: metrics.inp,
+        duration: Math.round(performance.now() - t0),
+      } satisfies PerformancePayload,
+    });
+  }
+
+  timer = setTimeout(flush, 10_000);
+  document.addEventListener('visibilitychange', onHide);
+  return flush;
+}
+
+export { startPerformanceTracking, umIdentify, umTrackEvent, umTrackRevenue, umTrackView };

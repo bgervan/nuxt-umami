@@ -1,5 +1,5 @@
 import type { ModuleOptions } from './options';
-import type { ModuleMode, NormalizedModuleOptions, UmPublicConfig } from './types';
+import type { ModuleMode, NormalizedModuleOptions, UmPrivateConfig, UmPublicConfig } from './types';
 import {
   addImports,
   addPlugin,
@@ -7,6 +7,7 @@ import {
   addTemplate,
   createResolver,
   defineNuxtModule,
+  useLogger,
 } from '@nuxt/kit';
 import { name, version } from '../package.json';
 import { isValidString, normalizeConfig } from './runtime/utils';
@@ -18,10 +19,11 @@ export default defineNuxtModule<ModuleOptions>({
     version,
     configKey: 'umami',
     compatibility: {
-      nuxt: '>=3',
+      nuxt: '>=3.0.0',
     },
   },
   setup(options, nuxt) {
+    const logger = useLogger('nuxt-umami');
     const { resolve } = createResolver(import.meta.url);
 
     const pathTo = {
@@ -37,6 +39,9 @@ export default defineNuxtModule<ModuleOptions>({
     const runtimeConfig = nuxt.options.runtimeConfig;
     const ENV = process.env;
 
+    // Build-time env var defaults — these set the initial values baked into the
+    // runtimeConfig defaults. At server start, Nuxt will override them with the
+    // NUXT_PUBLIC_UMAMI_* / NUXT_UMAMI_* environment variables automatically.
     const envHost = ENV.NUXT_UMAMI_HOST || ENV.NUXT_PUBLIC_UMAMI_HOST;
     const envId = ENV.NUXT_UMAMI_ID || ENV.NUXT_PUBLIC_UMAMI_ID;
     const envTag = ENV.NUXT_UMAMI_TAG || ENV.NUXT_PUBLIC_UMAMI_TAG;
@@ -65,9 +70,11 @@ export default defineNuxtModule<ModuleOptions>({
       domains,
       website: '',
       endpoint: '',
+      mode: 'faux' as ModuleMode,
+      logErrors: process.env.NODE_ENV === 'development' || logErrors,
     } satisfies UmPublicConfig;
 
-    const privateConfig = { endpoint: '', website: '', domains };
+    const privateConfig: UmPrivateConfig = { endpoint: '', website: '', domains };
 
     let mode: ModuleMode = 'faux';
     const proxyOpts: Array<NormalizedModuleOptions['proxy']> = ['direct', 'cloak'];
@@ -83,12 +90,17 @@ export default defineNuxtModule<ModuleOptions>({
             route: '/api/savory',
             handler: resolve('./runtime/server/endpoint'),
           });
+          // In cloak mode, endpoint/website are server-only — never put in public config.
+          // They are overridable at runtime via NUXT_UMAMI_ENDPOINT / NUXT_UMAMI_WEBSITE.
           privateConfig.endpoint = endpoint;
           privateConfig.website = id;
         }
         else if (proxy === 'direct') {
           // ^ proxy mode: direct; add proxy rule
           mode = 'direct';
+          // The client hits /api/savory, Nuxt proxies it to the real endpoint.
+          // routeRules is a build-time artifact — runtime override of the target
+          // URL is not possible in this mode without a rebuild.
           publicConfig.endpoint = '/api/savory';
           publicConfig.website = id;
           nuxt.options.routeRules ||= {};
@@ -96,7 +108,9 @@ export default defineNuxtModule<ModuleOptions>({
         }
       }
       else {
-        // ^ proxy mode: none; or ssr is disabled
+        // ^ proxy mode: none; direct to Umami
+        // endpoint/website go into public runtimeConfig and are overridable at
+        // runtime via NUXT_PUBLIC_UMAMI_ENDPOINT / NUXT_PUBLIC_UMAMI_WEBSITE.
         mode = 'direct';
         publicConfig.endpoint = endpoint;
         publicConfig.website = id;
@@ -105,35 +119,43 @@ export default defineNuxtModule<ModuleOptions>({
     else {
       // ^ module is disabled || host/id has errors
       if (!id)
-        console.warn('[umami] id is missing or incorrectly configured. Check module config.');
+        logger.warn('id is missing or incorrectly configured. Check module config.');
       if (!endpoint) {
-        console.warn(
-          '[umami] Your API endpoint is missing or incorrectly configured. Check `host` and/or `customEndpoint` in module config.',
+        logger.warn(
+          'Your API endpoint is missing or incorrectly configured. Check `host` and/or `customEndpoint` in module config.',
         );
       }
 
-      console.info(`[umami] ${
+      logger.info(
         enabled
           ? 'Currently running in test mode due to incorrect/missing options.'
-          : 'Umami is disabled.'
-      }`);
+          : 'Umami is disabled.',
+      );
     }
 
-    // add private config to runtime, only usable in server
-    runtimeConfig._proxyUmConfig = privateConfig;
+    publicConfig.mode = mode;
 
-    // generate utils template
+    // add public config to runtimeConfig — exposed to client and server.
+    // Nuxt automatically maps NUXT_PUBLIC_UMAMI_* env vars to these fields at runtime.
+    runtimeConfig.public.umami = publicConfig as unknown as typeof runtimeConfig.public.umami;
+
+    // add private config to runtimeConfig — server-only.
+    // Nuxt automatically maps NUXT_UMAMI_* env vars to these fields at runtime.
+    // Only meaningful in proxy: 'cloak' mode; empty strings otherwise.
+    runtimeConfig.umami = privateConfig as unknown as typeof runtimeConfig.umami;
+
+    // generate utils template — only contains collect() (tree-shaken per mode)
+    // and buildPathUrl() (urlOptions baked at build time). All config values are
+    // read from useRuntimeConfig() at call time inside the template functions.
     addTemplate({
       getContents: generateTemplate,
       filename: 'umami.config.mjs',
       write: true,
       options: {
         mode,
-        config: {
-          ...publicConfig,
-          logErrors: process.env.NODE_ENV === 'development' || logErrors,
-        },
         path: pathTo,
+        urlOptions: publicConfig.urlOptions,
+        logErrors: publicConfig.logErrors,
       },
     });
 

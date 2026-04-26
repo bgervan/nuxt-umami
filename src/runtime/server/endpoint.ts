@@ -13,20 +13,24 @@ export default defineEventHandler(async (event) => {
 
   // invalid data, throw error
   if (!result.success) {
-    console.log('[nuxt-umami-endpoint]: invalid data', result.output);
     throw createError({
       statusCode: 400,
       statusMessage: 'Invalid data.',
     });
   }
 
-  // grab config and host from runtimeConfig
-  const { endpoint, website, domains } = useRuntimeConfig()._proxyUmConfig;
+  // grab config from runtimeConfig — fully typed via module augmentation in types.ts
+  const { endpoint, website, domains } = useRuntimeConfig().umami;
 
   // request headers
   const headers = getHeaders(event);
   const origin = headers.origin;
   const userAgent = headers['user-agent'];
+  // Forward the real client IP to Umami so geo-location works correctly
+  // when this proxy runs behind a CDN/edge network (Netlify, Vercel, etc.).
+  // Prefer the existing X-Forwarded-For chain; fall back to request-ip which
+  // handles X-Real-IP, CF-Connecting-IP, and other platform-specific headers.
+  const forwardedFor = headers['x-forwarded-for'] || getClientIp(event.node.req) || '';
 
   // TODO: option to limit access to only user domain, maybe use siteConfig
 
@@ -40,21 +44,21 @@ export default defineEventHandler(async (event) => {
 
   try {
     const { payload, cache, type } = result.output;
-    const ip = getClientIp(event.node.req);
 
     return await ofetch<string>(endpoint, {
       method: 'POST',
       headers: {
         ...(cache && { 'x-umami-cache': cache }),
         ...(userAgent && { 'user-agent': userAgent }),
+        // Pass the real client IP to Umami for accurate geo-location.
+        // Skip in dev (127.0.0.1 confuses Umami's IP parser).
+        ...(!import.meta.dev && forwardedFor && { 'x-forwarded-for': forwardedFor }),
       },
       body: {
         type,
         payload: {
           website,
           ...payload,
-          // don't send localhost ip (127.0.0.1)
-          ...(!import.meta.dev && { ip }),
         },
       },
       credentials: 'omit',
