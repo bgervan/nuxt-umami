@@ -106,6 +106,7 @@ function getPayload(): ViewPayload {
     url,
     title,
     referrer: ref,
+    ...(identity ? { id: identity } : null),
   };
 };
 
