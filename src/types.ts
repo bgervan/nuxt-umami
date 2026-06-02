@@ -26,6 +26,11 @@ interface UmPublicConfig extends _PublicConfig {
   /** Determines which collect() implementation to use at runtime */
   mode: ModuleMode;
   logErrors: boolean;
+  /**
+   * Computed Umami `recorder.js` config (heatmaps/replays), or `null` when off.
+   * `src` is `<host>/recorder.js`; `id` is the website id.
+   */
+  recorder: { src: string; id: string } | null;
 }
 
 interface UmPrivateConfig {

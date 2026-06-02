@@ -40,6 +40,7 @@ function normalizeConfig(options: ModuleOptions = {}): NormalizedModuleOptions {
     logErrors = false,
     enabled = true,
     performance = false,
+    heatmap = false,
     tag = undefined,
     excludeQueryParams = false,
     trailingSlash = 'any',
@@ -85,6 +86,7 @@ function normalizeConfig(options: ModuleOptions = {}): NormalizedModuleOptions {
     useDirective: useDirective === true,
     logErrors: logErrors === true,
     performance: performance === true,
+    heatmap: heatmap === true,
     enabled: enabled !== false,
   };
 }

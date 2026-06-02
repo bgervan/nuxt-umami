@@ -1,4 +1,5 @@
 import { defineNuxtPlugin, useRouter, useRuntimeConfig } from '#app';
+import { useHead } from '#imports';
 import { startPerformanceTracking, umTrackView } from './composables';
 import { directive } from './directive';
 
@@ -6,13 +7,26 @@ export default defineNuxtPlugin({
   name: 'umami-tracker',
   parallel: true,
   async setup(nuxtApp) {
-    const { useDirective, autoTrack, performance } = useRuntimeConfig().public.umami;
+    const { useDirective, autoTrack, performance, recorder } = useRuntimeConfig().public.umami;
 
     if (useDirective)
       nuxtApp.vueApp.directive('umami', directive);
 
     if (performance)
       startPerformanceTracking();
+
+    // Heatmaps / session replays: load Umami's recorder.js (server-side toggles
+    // decide what it records). It's a deferred, client-only script.
+    if (recorder) {
+      useHead({
+        script: [{
+          key: 'umami-recorder',
+          src: recorder.src,
+          defer: true,
+          'data-website-id': recorder.id,
+        }],
+      });
+    }
 
     if (autoTrack) {
       // Track the last path we fired a pageview for so that apps using nested

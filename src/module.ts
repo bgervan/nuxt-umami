@@ -64,6 +64,14 @@ export default defineNuxtModule<ModuleOptions>({
 
     const endpoint = host ? new URL(host).origin + (customEndpoint || '/api/send') : '';
 
+    // Umami `recorder.js` (heatmaps/replays) — loaded client-side when enabled.
+    // It always carries the real host + website id (it cannot be cloaked), so it
+    // is computed from the build-time host/id and exposed regardless of proxy mode.
+    const recorderEnabled = runtimeOptions.heatmap;
+    const recorder = recorderEnabled && host && id
+      ? { src: new URL(host).origin + '/recorder.js', id }
+      : null;
+
     const publicConfig = {
       ...runtimeOptions,
       enabled,
@@ -72,6 +80,7 @@ export default defineNuxtModule<ModuleOptions>({
       endpoint: '',
       mode: 'faux' as ModuleMode,
       logErrors: process.env.NODE_ENV === 'development' || logErrors,
+      recorder,
     } satisfies UmPublicConfig;
 
     const privateConfig: UmPrivateConfig = { endpoint: '', website: '', domains };
