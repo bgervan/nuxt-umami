@@ -6,35 +6,48 @@ Integrate [**Umami Analytics**](https://umami.is/) into your Nuxt websites/appli
 
 ---
 
-## Fork: colinmollenhour/nuxt-umami
+## Fork: bgervan/nuxt-umami
 
-This fork adds several bug fixes and improvements on top of the upstream
-[ijkml/nuxt-umami](https://github.com/ijkml/nuxt-umami) v3.2.1.
-Use this if you need:
+A fork of [colinmollenhour/nuxt-umami](https://github.com/colinmollenhour/nuxt-umami) (itself a fork of
+upstream [ijkml/nuxt-umami](https://github.com/ijkml/nuxt-umami)), tracking the **`next-major` (v3.4.0)**
+line. It bundles everything from those forks **plus heatmaps and session replays**.
 
-- Distinct user ID support in `umIdentify` for authenticated SaaS users (Umami v2.18.0+)
-- Accurate geo-location when using `proxy: 'cloak'` on Netlify/Vercel
-- Fixed duplicate pageview tracking with nested `<NuxtPage>` layouts
-- True runtime env var support — change Umami endpoint/ID at server start without rebuilding
+### What this fork adds over upstream `ijkml/nuxt-umami`
+
+**New here (`bgervan`):**
+- 🔥 **`heatmap`** option — loads Umami's `recorder.js` to enable click + scroll **heatmaps**
+- 🎥 **`replays`** option — enables Umami **session replays** (shares the same `recorder.js`)
+
+**Inherited from `next-major` / `colinmollenhour`:**
+- 🆔 **Distinct user ID** via `umIdentify(id)` — auto-attached to every later pageview/event (Umami v2.18.0+)
+- 📊 **`performance`** option — Core Web Vitals: LCP, FCP, CLS, INP, TTFB (Umami v3.1.0+)
+- 🌍 Accurate geo-location with `proxy: 'cloak'` on Netlify/Vercel
+- 🧭 Fixed duplicate pageviews with nested `<NuxtPage>` layouts
+- ♻️ Runtime env-var support — change endpoint/ID at server start, no rebuild
+- 📦 `@nuxt/kit` / `@nuxt/schema` relaxed to `>=3.15.4` (Nuxt 4 compatible)
+
+> **Heatmaps & replays** require **self-hosted Umami v3.1.0+** and must be enabled per-website in the
+> Umami dashboard (Websites → Edit → Replays & Heatmaps), where the sample rate / mask level / max
+> duration are set. Both load the same `recorder.js` — the dashboard decides what is recorded. Because
+> `recorder.js` carries your host + website id (it's a public script), it **cannot be hidden with
+> `proxy: 'cloak'`**.
 
 ### Install this fork
 
-Install from the release tarball (the only supported method — `dist/` is not committed to git):
+Not published to npm — install from the **release tarball** (the supported method):
 
 ```sh
-pnpm add https://github.com/colinmollenhour/nuxt-umami/releases/download/v3.4.0/nuxt-umami-v3.4.0.tgz
+pnpm add https://github.com/bgervan/nuxt-umami/releases/download/v3.4.0/nuxt-umami-3.4.0.tgz
 # or
-npm install https://github.com/colinmollenhour/nuxt-umami/releases/download/v3.4.0/nuxt-umami-v3.4.0.tgz
+npm install https://github.com/bgervan/nuxt-umami/releases/download/v3.4.0/nuxt-umami-3.4.0.tgz
 # or
-yarn add https://github.com/colinmollenhour/nuxt-umami/releases/download/v3.4.0/nuxt-umami-v3.4.0.tgz
+yarn add https://github.com/bgervan/nuxt-umami/releases/download/v3.4.0/nuxt-umami-3.4.0.tgz
 ```
 
-> **Note:** Because this fork is not published to npm, `npx nuxi module add` will not
-> work. Register the module manually as shown below.
+> Replace `v3.4.0` / `3.4.0` with the actual release tag and tarball version.
+> **Note:** since it isn't on npm, `npx nuxi module add` won't work — register the module manually below.
 
 ### Configure
-
-Add to `nuxt.config.ts`:
 
 ```ts
 export default defineNuxtConfig({
@@ -43,16 +56,25 @@ export default defineNuxtConfig({
     host: 'https://your-umami-instance.example.com',
     id: 'your-website-id',
     autoTrack: true,
-    // proxy: 'cloak',       // hide your Umami endpoint from the browser
-    // useDirective: true,   // enable v-umami directive
+    // performance: true,    // Core Web Vitals (Umami v3.1.0+)
+    // heatmap: true,        // click + scroll heatmaps via recorder.js (v3.1.0+)
+    // replays: true,        // session replays via recorder.js (v3.1.0+)
+    // proxy: 'cloak',       // hide your Umami endpoint (incompatible with heatmap/replays)
+    // useDirective: true,
     // ignoreLocalhost: true,
     // domains: ['mysite.com'],
   },
 });
 ```
 
-The `host` and `id` values above are build-time defaults. To override them at server start
-without rebuilding, use the environment variables described below.
+Identify logged-in users — the distinct ID is then auto-included on all subsequent calls:
+
+```ts
+umIdentify('user-123')                    // ID only
+umIdentify('user-123', { plan: 'pro' })   // ID + session data
+```
+
+The `host`/`id` are build-time defaults; override at server start via the env vars described below.
 
 Full configuration reference: [umami.nuxt.dev/api/configuration](https://umami.nuxt.dev/api/configuration)
 
