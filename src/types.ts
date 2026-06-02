@@ -34,7 +34,7 @@ interface UmPrivateConfig {
   domains: Array<string> | null;
 }
 
-type PreflightResult = true | 'ssr' | 'domain' | 'localhost' | 'local-storage';
+type PreflightResult = true | 'ssr' | 'domain' | 'localhost' | 'local-storage' | 'disabled';
 type ModuleMode = 'faux' | 'proxy' | 'direct';
 
 type EventData = Record<string, string | number | boolean> | null;

@@ -19,10 +19,27 @@ let staticPayload: StaticPayload | undefined;
 let queryRef: string | undefined;
 let queryRefConsumed = false;
 let identifyId: string | undefined;
+// In-memory runtime kill-switch (NO device storage). Toggle via umSetEnabled() —
+// e.g. from a cookie-consent modal — to stop all tracking at runtime. Resets to
+// enabled on reload; the host app re-applies its stored consent state.
+let trackingEnabled = true;
+
+/**
+ * Enable/disable all Umami tracking at runtime, in memory (no localStorage, so it
+ * doesn't add device storage). Use it to honor a cookie-consent opt-out:
+ * `umSetEnabled(false)` stops pageviews, events and identify.
+ */
+function umSetEnabled(enabled: boolean): void {
+  trackingEnabled = enabled !== false;
+}
 
 function runPreflight(): PreflightResult {
   if (typeof window === 'undefined')
     return 'ssr';
+
+  // Runtime kill-switch (in-memory; set by the host app, e.g. on consent opt-out)
+  if (!trackingEnabled)
+    return 'disabled';
 
   // Disable tracking when umami.disabled=1 in localStorage
   if (window.localStorage.getItem('umami.disabled') === '1')
@@ -389,4 +406,4 @@ function startPerformanceTracking(): () => void {
   return flush;
 }
 
-export { startPerformanceTracking, umIdentify, umTrackEvent, umTrackRevenue, umTrackView };
+export { startPerformanceTracking, umIdentify, umSetEnabled, umTrackEvent, umTrackRevenue, umTrackView };

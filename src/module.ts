@@ -159,7 +159,7 @@ export default defineNuxtModule<ModuleOptions>({
       },
     });
 
-    const composables = ['umTrackEvent', 'umTrackView', 'umIdentify', 'umTrackRevenue'];
+    const composables = ['umTrackEvent', 'umTrackView', 'umIdentify', 'umTrackRevenue', 'umSetEnabled'];
 
     // add composables
     addImports(composables.map((name) => {
