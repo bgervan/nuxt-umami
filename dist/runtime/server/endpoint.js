@@ -9,16 +9,16 @@ export default defineEventHandler(async (event) => {
     (body) => parseEventBody(body)
   );
   if (!result.success) {
-    console.log("[nuxt-umami-endpoint]: invalid data", result.output);
     throw createError({
       statusCode: 400,
       statusMessage: "Invalid data."
     });
   }
-  const { endpoint, website, domains } = useRuntimeConfig()._proxyUmConfig;
+  const { endpoint, website, domains } = useRuntimeConfig().umami;
   const headers = getHeaders(event);
   const origin = headers.origin;
   const userAgent = headers["user-agent"];
+  const forwardedFor = headers["x-forwarded-for"] || getClientIp(event.node.req) || "";
   if (!origin || domains && !domains.includes(new URL(origin).hostname)) {
     throw createError({
       statusCode: 403,
@@ -28,20 +28,20 @@ export default defineEventHandler(async (event) => {
   }
   try {
     const { payload, cache, type } = result.output;
-    const ip = getClientIp(event.node.req);
     return await ofetch(endpoint, {
       method: "POST",
       headers: {
         ...cache && { "x-umami-cache": cache },
-        ...userAgent && { "user-agent": userAgent }
+        ...userAgent && { "user-agent": userAgent },
+        // Pass the real client IP to Umami for accurate geo-location.
+        // Skip in dev (127.0.0.1 confuses Umami's IP parser).
+        ...!import.meta.dev && forwardedFor && { "x-forwarded-for": forwardedFor }
       },
       body: {
         type,
         payload: {
           website,
-          ...payload,
-          // don't send localhost ip (127.0.0.1)
-          ...!import.meta.dev && { ip }
+          ...payload
         }
       },
       credentials: "omit"

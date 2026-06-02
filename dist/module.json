@@ -1,9 +1,9 @@
 {
   "name": "nuxt-umami",
-  "version": "3.2.1",
+  "version": "3.4.0",
   "configKey": "umami",
   "compatibility": {
-    "nuxt": ">=3"
+    "nuxt": ">=3.0.0"
   },
   "builder": {
     "@nuxt/module-builder": "0.8.4",

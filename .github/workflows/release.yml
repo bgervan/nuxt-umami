@@ -1,0 +1,47 @@
+name: release
+
+# Build the module and attach an npm-pack tarball to the GitHub Release,
+# so it can be installed via the release download URL:
+#   pnpm add https://github.com/bgervan/nuxt-umami/releases/download/<tag>/nuxt-umami-<ver>.tgz
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tarball:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare module types (.nuxt)
+        run: pnpm run dev:prepare
+
+      - name: Build dist
+        run: pnpm run prepack
+
+      - name: Pack tarball
+        run: pnpm pack
+
+      - name: Attach tarball to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" nuxt-umami-*.tgz --clobber
+
+      - name: Upload tarball as artifact (manual runs)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuxt-umami-tarball
+          path: nuxt-umami-*.tgz

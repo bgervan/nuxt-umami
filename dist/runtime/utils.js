@@ -24,6 +24,9 @@ function normalizeConfig(options = {}) {
     useDirective = false,
     logErrors = false,
     enabled = true,
+    performance = false,
+    heatmap = false,
+    replays = false,
     tag = void 0,
     excludeQueryParams = false,
     trailingSlash = "any",
@@ -61,6 +64,9 @@ function normalizeConfig(options = {}) {
     autoTrack: autoTrack !== false,
     useDirective: useDirective === true,
     logErrors: logErrors === true,
+    performance: performance === true,
+    heatmap: heatmap === true,
+    replays: replays === true,
     enabled: enabled !== false
   };
 }
@@ -98,10 +104,12 @@ const _payloadProps = {
   // optional property
   name: "skip",
   // optional, 'nonempty' in EventPayload
-  data: "skip"
+  data: "skip",
   // optional, 'data' in EventPayload & IdentifyPayload
+  id: "skip"
+  // optional, distinct user ID in IdentifyPayload (Umami v2.18.0+)
 };
-const _payloadType = ["event", "identify"];
+const _payloadType = ["event", "identify", "performance"];
 const _bodyProps = ["cache", "payload", "type"];
 function isValidPayload(obj) {
   if (!isRecord(obj))
@@ -128,6 +136,10 @@ function isValidPayload(obj) {
     validatorKeys.push("tag");
     validators.tag = "string";
   }
+  if (objKeys.includes("id")) {
+    validatorKeys.push("id");
+    validators.id = "nonempty";
+  }
   if (objKeys.length !== validatorKeys.length || !validatorKeys.every((k) => objKeys.includes(k))) {
     return false;
   }
@@ -140,12 +152,19 @@ function isValidPayload(obj) {
   }
   return true;
 }
+const _perfNumericKeys = ["ttfb", "fcp", "lcp", "cls", "inp", "duration"];
+function isValidPerformancePayload(obj) {
+  if (!isRecord(obj))
+    return false;
+  const required = ["hostname", "language", "screen", "url", ..._perfNumericKeys];
+  return required.every((k) => k in obj) && _perfNumericKeys.every((k) => typeof obj[k] === "number") && isValidString(obj.hostname);
+}
 function parseEventBody(body) {
   const error = {
     success: false,
     output: body
   };
-  if (!isRecord(body) || Object.keys(body).length !== _bodyProps.length)
+  if (!isRecord(body))
     return error;
   if (!("type" in body && isValidString(body.type) && "cache" in body && typeof body.cache === "string" && "payload" in body && isRecord(body.payload))) {
     return error;
@@ -153,6 +172,11 @@ function parseEventBody(body) {
   const { payload, cache, type } = body;
   if (!includes(_payloadType, type))
     return error;
+  if (type === "performance") {
+    if (!isValidPerformancePayload(payload))
+      return error;
+    return { success: true, output: { type, cache, payload } };
+  }
   if (!isValidPayload(payload))
     return error;
   return {

@@ -16,26 +16,25 @@ declare function umTrackView(path?: string, referrer?: string): FetchResult;
  */
 declare function umTrackEvent(eventName: string, eventData?: EventData): FetchResult;
 /**
- * Save data about the current session with optional distinct user ID.
+ * Save data about the current session and optionally identify the user.
  *
- * Umami supports saving session data and identifying users with a distinct ID.
+ * Supports three call signatures matching the official Umami tracker:
+ * - `umIdentify(uniqueId)` — set a distinct user ID (Umami v2.18.0+)
+ * - `umIdentify(uniqueId, sessionData)` — set ID and session data together
+ * - `umIdentify(sessionData)` — set session data only (original behaviour)
+ *
+ * The distinct ID is stored in a module-level closure and automatically
+ * included in all subsequent event and pageview payloads, matching the
+ * behaviour of the official Umami tracker script.
+ *
  * @see [v2.13.0 release](https://github.com/umami-software/umami/releases/tag/v2.13.0)
- * @see [v2.18.0 distinct IDs](https://github.com/umami-software/umami/releases/tag/v2.18.0)
+ * @see [Umami Docs — Identify](https://umami.is/docs/tracker-functions)
  *
- * @param idOrData distinct user ID (string) or session data object
- * @param sessionData optional session data when first param is a distinct ID
- *
- * @example
- * // ID only
- * umIdentify('user@example.com')
- *
- * // ID with data
- * umIdentify('user@example.com', { name: 'John', plan: 'pro' })
- *
- * // Data only (backward compatible)
- * umIdentify({ name: 'John', plan: 'pro' })
+ * @param uniqueIdOrData distinct user ID string (max 50 chars) **or** session data object
+ * @param sessionData session data when first arg is a distinct ID
  */
-declare function umIdentify(idOrData?: string | EventData, sessionData?: EventData): FetchResult;
+declare function umIdentify(uniqueId: string, sessionData?: EventData): FetchResult;
+declare function umIdentify(sessionData?: EventData): FetchResult;
 /**
  * Tracks financial performance
  * @see [Umami Docs](https://umami.is/docs/reports/report-revenue)
@@ -46,4 +45,5 @@ declare function umIdentify(idOrData?: string | EventData, sessionData?: EventDa
  * ([ISO 4217](https://en.wikipedia.org/wiki/ISO_4217#List_of_ISO_4217_currency_codes))
  */
 declare function umTrackRevenue(eventName: string, revenue: number, currency?: CurrencyCode): FetchResult;
-export { umIdentify, umTrackEvent, umTrackRevenue, umTrackView };
+declare function startPerformanceTracking(): () => void;
+export { startPerformanceTracking, umIdentify, umTrackEvent, umTrackRevenue, umTrackView };

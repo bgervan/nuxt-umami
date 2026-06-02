@@ -1,5 +1,5 @@
-import { logger } from "#build/umami.config.mjs";
 import { umTrackEvent } from "./composables.js";
+import { logger } from "./logger.js";
 const ATTR_NAME = "savoryName";
 const ATTR_DATA = "savoryData";
 async function setAttributes(el, value) {

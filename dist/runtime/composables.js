@@ -1,9 +1,12 @@
-import { buildPathUrl, collect, config, logger } from "#build/umami.config.mjs";
+import { buildPathUrl, collect } from "#build/umami.config.mjs";
+import { useRuntimeConfig } from "#imports";
+import { logger } from "./logger.js";
 import { earlyPromise, flattenObject, isValidString } from "./utils.js";
 let configChecks;
 let staticPayload;
 let queryRef;
-let identity;
+let queryRefConsumed = false;
+let identifyId;
 function runPreflight() {
   if (typeof window === "undefined")
     return "ssr";
@@ -12,7 +15,7 @@ function runPreflight() {
   if (configChecks)
     return configChecks;
   configChecks = function() {
-    const { ignoreLocalhost, domains } = config;
+    const { ignoreLocalhost, domains } = useRuntimeConfig().public.umami;
     const hostname = window.location.hostname;
     if (ignoreLocalhost && hostname === "localhost")
       return "localhost";
@@ -31,7 +34,7 @@ function getStaticPayload() {
     screen: { width, height },
     navigator: { language }
   } = window;
-  const { tag } = config;
+  const { tag } = useRuntimeConfig().public.umami;
   staticPayload = {
     hostname,
     language,
@@ -41,11 +44,17 @@ function getStaticPayload() {
   return staticPayload;
 }
 function getQueryRef() {
-  if (typeof queryRef === "string")
-    return queryRef;
-  const params = new URL(window.location.href).searchParams;
-  queryRef = params.get("referrer") || params.get("ref") || "";
+  if (queryRefConsumed)
+    return "";
+  if (typeof queryRef !== "string") {
+    const params = new URL(window.location.href).searchParams;
+    queryRef = params.get("referrer") || params.get("ref") || "";
+  }
   return queryRef;
+}
+function consumeQueryRef() {
+  queryRefConsumed = true;
+  queryRef = "";
 }
 function getPayload() {
   const { referrer, title } = window.document;
@@ -56,6 +65,9 @@ function getPayload() {
   return {
     ...getStaticPayload(),
     ...tag ? { tag } : null,
+    // Auto-include the distinct ID on all payloads after umIdentify is called,
+    // matching the behaviour of the official Umami tracker script.
+    ...identifyId ? { id: identifyId } : null,
     url,
     title,
     referrer: ref,
@@ -72,7 +84,7 @@ function umTrackView(path, referrer) {
     return earlyPromise(false);
   }
   const url = buildPathUrl(isValidString(path) ? path : null);
-  return collect({
+  const result = collect({
     type: "event",
     payload: {
       ...getPayload(),
@@ -80,6 +92,8 @@ function umTrackView(path, referrer) {
       ...isValidString(referrer) && { referrer }
     }
   });
+  consumeQueryRef();
+  return result;
 }
 function umTrackEvent(eventName, eventData) {
   const check = runPreflight();
@@ -94,6 +108,9 @@ function umTrackEvent(eventName, eventData) {
   if (!isValidString(eventName)) {
     logger("event-name");
     name = "#unknown-event";
+  } else if (eventName.length > 50) {
+    logger("event-name-length");
+    name = eventName.slice(0, 50);
   }
   return collect({
     type: "event",
@@ -104,7 +121,7 @@ function umTrackEvent(eventName, eventData) {
     }
   });
 }
-function umIdentify(idOrData, sessionData) {
+function umIdentify(uniqueIdOrData, sessionData) {
   const check = runPreflight();
   if (check === "ssr")
     return earlyPromise(false);
@@ -114,19 +131,20 @@ function umIdentify(idOrData, sessionData) {
   }
   let id;
   let data;
-  if (typeof idOrData === "string") {
-    id = idOrData;
-    identity = idOrData;
+  if (typeof uniqueIdOrData === "string") {
+    id = uniqueIdOrData.trim().slice(0, 50) || void 0;
     data = flattenObject(sessionData);
   } else {
-    data = flattenObject(idOrData);
+    data = flattenObject(uniqueIdOrData ?? void 0);
   }
+  if (id)
+    identifyId = id;
   return collect({
     type: "identify",
     payload: {
       ...getPayload(),
-      ...id && { id },
-      ...data && { data }
+      ...id ? { id } : null,
+      ...data ? { data } : null
     }
   });
 }
@@ -137,8 +155,8 @@ function umTrackRevenue(eventName, revenue, currency = "USD") {
     return earlyPromise(false);
   }
   let $cur = null;
-  if (typeof currency === "string" && /^[A-Z]{3}$/i.test(currency.trim()))
-    $cur = currency.trim();
+  if (typeof currency === "string" && /^[A-Z]{3}$/.test(currency.trim().toUpperCase()))
+    $cur = currency.trim().toUpperCase();
   else
     logger("currency", `Got: ${currency}`);
   return umTrackEvent(eventName, {
@@ -146,4 +164,93 @@ function umTrackRevenue(eventName, revenue, currency = "USD") {
     ...$cur ? { currency: $cur } : null
   });
 }
-export { umIdentify, umTrackEvent, umTrackRevenue, umTrackView };
+function startPerformanceTracking() {
+  if (typeof window === "undefined" || typeof PerformanceObserver === "undefined")
+    return () => {
+    };
+  if (runPreflight() !== true)
+    return () => {
+    };
+  const t0 = performance.now();
+  let flushed = false;
+  const metrics = { ttfb: 0, fcp: 0, lcp: 0, cls: 0, inp: 0 };
+  const [nav] = performance.getEntriesByType("navigation");
+  if (nav) {
+    const activationStart = nav.activationStart ?? 0;
+    metrics.ttfb = Math.max(nav.responseStart - activationStart, 0);
+  }
+  const observers = [];
+  function observe(type, cb, extra) {
+    try {
+      const obs = new PerformanceObserver(cb);
+      obs.observe({ type, buffered: true, ...extra });
+      observers.push(obs);
+    } catch {
+    }
+  }
+  observe("paint", (list) => {
+    const entry = list.getEntriesByName("first-contentful-paint")[0];
+    if (entry)
+      metrics.fcp = entry.startTime;
+  });
+  observe("largest-contentful-paint", (list) => {
+    const entries = list.getEntries();
+    if (entries.length)
+      metrics.lcp = entries.at(-1).startTime;
+  });
+  let clsSession = 0;
+  let clsSessionStart = -1;
+  observe("layout-shift", (list) => {
+    for (const e of list.getEntries()) {
+      if (e.hadRecentInput)
+        continue;
+      if (clsSessionStart >= 0 && e.startTime - clsSessionStart < 1e3)
+        clsSession += e.value;
+      else
+        clsSession = e.value;
+      clsSessionStart = e.startTime;
+      if (clsSession > metrics.cls)
+        metrics.cls = clsSession;
+    }
+  });
+  observe("event", (list) => {
+    for (const e of list.getEntries()) {
+      if (e.duration > metrics.inp)
+        metrics.inp = e.duration;
+    }
+  }, { durationThreshold: 40 });
+  let timer;
+  function onHide() {
+    if (document.visibilityState === "hidden")
+      flush();
+  }
+  function flush() {
+    if (flushed)
+      return;
+    flushed = true;
+    clearTimeout(timer);
+    document.removeEventListener("visibilitychange", onHide);
+    for (const obs of observers) {
+      try {
+        obs.disconnect();
+      } catch {
+      }
+    }
+    collect({
+      type: "performance",
+      payload: {
+        ...getPayload(),
+        ttfb: metrics.ttfb,
+        fcp: metrics.fcp,
+        lcp: metrics.lcp,
+        cls: metrics.cls,
+        inp: metrics.inp,
+        duration: Math.round(performance.now() - t0)
+      }
+    });
+  }
+  timer = setTimeout(flush, 1e4);
+  document.addEventListener("visibilitychange", onHide);
+  return flush;
+}
+export { startPerformanceTracking, umIdentify, umTrackEvent, umTrackRevenue, umTrackView };

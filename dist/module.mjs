@@ -1,10 +1,11 @@
-import { defineNuxtModule, createResolver, addServerHandler, addTemplate, addImports, addPlugin } from '@nuxt/kit';
+import { defineNuxtModule, useLogger, createResolver, addServerHandler, addTemplate, addImports, addPlugin } from '@nuxt/kit';
 import { normalizeConfig, isValidString } from '../dist/runtime/utils.js';
 
 const name = "nuxt-umami";
-const version = "3.2.1";
+const version = "3.4.0";
 
-const fn_faux = `const payload = load.payload;
+const fn_faux = `const { enabled, endpoint, website } = useRuntimeConfig().public.umami;
+  const payload = load.payload;
 
   if (enabled) {
     if (!endpoint)
@@ -24,6 +25,7 @@ const fn_proxy = `return ofetch('/api/savory', {
     .then(handleSuccess)
     .catch(handleError);`;
 const fn_direct = `const { type, payload } = load;
+  const { endpoint, website } = useRuntimeConfig().public.umami;
 
   return ofetch(endpoint, {
     method: 'POST',
@@ -35,28 +37,19 @@ const fn_direct = `const { type, payload } = load;
     .catch(handleError);`;
 const collectFn = { fn_direct, fn_faux, fn_proxy };
 function generateTemplate({
-  options: { mode, path, config: { logErrors, ...config } }
+  options: { mode, path, urlOptions, logErrors }
 }) {
   return `// template-generated
 import { ofetch } from 'ofetch';
-import { ${logErrors ? "logger" : "fauxLogger"} as $logger } from "${path.logger}";
+import { useRuntimeConfig } from '#imports';
+import { ${logErrors ? "logger" : "fauxLogger"} as logger } from "${path.logger}";
 
 /**
  * @typedef {import("${path.types}").FetchFn} FetchFn
  * 
  * @typedef {import("${path.types}").BuildPathUrlFn} BuildPathUrlFn
- * 
- * @typedef {import("${path.types}").UmPublicConfig} UmPublicConfig
  */
 
-export const logger = $logger;
-
-/**
- * @type UmPublicConfig
-*/
-export const config = ${JSON.stringify(config, null, 2)};
-
-const { endpoint, website, enabled } = config;
 let cache = '';
 
 function handleError(err) {
@@ -88,10 +81,10 @@ export function buildPathUrl(loc) {
     const url = new URL(loc, window.location.href);
     const path = url.pathname;
   
-    ${config.urlOptions.excludeHash && `url.hash = '';`}
-    ${config.urlOptions.excludeSearch && `url.search = '';`}
+    ${urlOptions.excludeHash && `url.hash = '';`}
+    ${urlOptions.excludeSearch && `url.search = '';`}
   
-    url.pathname = ${config.urlOptions.trailingSlash === "always" ? `path.endsWith('/') ? path : path + '/'` : config.urlOptions.trailingSlash === "never" ? `path.endsWith('/') ? path.slice(0, -1) : path` : `path`};
+    url.pathname = ${urlOptions.trailingSlash === "always" ? `path.endsWith('/') ? path : path + '/'` : urlOptions.trailingSlash === "never" ? `path.endsWith('/') ? path.slice(0, -1) : path` : `path`};
   
     return url.toString();
   } catch {
@@ -116,10 +109,11 @@ const module = defineNuxtModule({
     version,
     configKey: "umami",
     compatibility: {
-      nuxt: ">=3"
+      nuxt: ">=3.0.0"
     }
   },
   setup(options, nuxt) {
+    const logger = useLogger("nuxt-umami");
     const { resolve } = createResolver(import.meta.url);
     const pathTo = {
       utils: resolve("./runtime/utils"),
@@ -147,12 +141,17 @@ const module = defineNuxtModule({
       ...isValidString(envTag) && { tag: envTag }
     });
     const endpoint = host ? new URL(host).origin + (customEndpoint || "/api/send") : "";
+    const recorderEnabled = runtimeOptions.heatmap || runtimeOptions.replays;
+    const recorder = recorderEnabled && host && id ? { src: new URL(host).origin + "/recorder.js", id } : null;
     const publicConfig = {
       ...runtimeOptions,
       enabled,
       domains,
       website: "",
-      endpoint: ""
+      endpoint: "",
+      mode: "faux",
+      logErrors: process.env.NODE_ENV === "development" || logErrors,
+      recorder
     };
     const privateConfig = { endpoint: "", website: "", domains };
     let mode = "faux";
@@ -181,26 +180,28 @@ const module = defineNuxtModule({
       }
     } else {
       if (!id)
-        console.warn("[umami] id is missing or incorrectly configured. Check module config.");
+        logger.warn("id is missing or incorrectly configured. Check module config.");
       if (!endpoint) {
-        console.warn(
-          "[umami] Your API endpoint is missing or incorrectly configured. Check `host` and/or `customEndpoint` in module config."
+        logger.warn(
+          "Your API endpoint is missing or incorrectly configured. Check `host` and/or `customEndpoint` in module config."
         );
       }
-      console.info(`[umami] ${enabled ? "Currently running in test mode due to incorrect/missing options." : "Umami is disabled."}`);
+      logger.info(
+        enabled ? "Currently running in test mode due to incorrect/missing options." : "Umami is disabled."
+      );
     }
-    runtimeConfig._proxyUmConfig = privateConfig;
+    publicConfig.mode = mode;
+    runtimeConfig.public.umami = publicConfig;
+    runtimeConfig.umami = privateConfig;
     addTemplate({
       getContents: generateTemplate,
       filename: "umami.config.mjs",
       write: true,
       options: {
         mode,
-        config: {
-          ...publicConfig,
-          logErrors: process.env.NODE_ENV === "development" || logErrors
-        },
-        path: pathTo
+        path: pathTo,
+        urlOptions: publicConfig.urlOptions,
+        logErrors: publicConfig.logErrors
       }
     });
     const composables = ["umTrackEvent", "umTrackView", "umIdentify", "umTrackRevenue"];

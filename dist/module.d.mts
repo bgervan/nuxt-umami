@@ -10,6 +10,9 @@ declare const _default: _nuxt_schema.NuxtModule<Partial<{
     customEndpoint: string | null;
     tag: string | null;
     useDirective: boolean;
+    performance: boolean;
+    heatmap: boolean;
+    replays: boolean;
     logErrors: boolean;
     proxy: false | "direct" | "cloak";
     trailingSlash: "any" | "always" | "never";
@@ -29,6 +32,9 @@ declare const _default: _nuxt_schema.NuxtModule<Partial<{
     customEndpoint: string | null;
     tag: string | null;
     useDirective: boolean;
+    performance: boolean;
+    heatmap: boolean;
+    replays: boolean;
     logErrors: boolean;
     proxy: false | "direct" | "cloak";
     trailingSlash: "any" | "always" | "never";
