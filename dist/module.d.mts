@@ -13,6 +13,7 @@ declare const _default: _nuxt_schema.NuxtModule<Partial<{
     performance: boolean;
     heatmap: boolean;
     replays: boolean;
+    recorderAutoLoad: boolean;
     logErrors: boolean;
     proxy: false | "direct" | "cloak";
     trailingSlash: "any" | "always" | "never";
@@ -35,6 +36,7 @@ declare const _default: _nuxt_schema.NuxtModule<Partial<{
     performance: boolean;
     heatmap: boolean;
     replays: boolean;
+    recorderAutoLoad: boolean;
     logErrors: boolean;
     proxy: false | "direct" | "cloak";
     trailingSlash: "any" | "always" | "never";

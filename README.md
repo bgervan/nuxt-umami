@@ -17,6 +17,10 @@ line. It bundles everything from those forks **plus heatmaps and session replays
 **New here (`bgervan`):**
 - 🔥 **`heatmap`** option — loads Umami's `recorder.js` to enable click + scroll **heatmaps**
 - 🎥 **`replays`** option — enables Umami **session replays** (shares the same `recorder.js`)
+- 🛑 **`umSetEnabled(false)`** — **in-memory** runtime kill-switch (no `localStorage`, so no device
+  storage) to stop **all** tracking + the recorder on a cookie-consent opt-out
+- ⏯️ **`umLoadRecorder()` / `umUnloadRecorder()` + `recorderAutoLoad: false`** — load the recorder
+  **on demand** (after explicit consent) instead of on page load — required for compliant replays
 
 **Inherited from `next-major` / `colinmollenhour`:**
 - 🆔 **Distinct user ID** via `umIdentify(id)` — auto-attached to every later pageview/event (Umami v2.18.0+)
@@ -117,6 +121,14 @@ umIdentify('[email protected]', { plan: 'pro', company: 'Acme' });
 
 // Track revenue
 umTrackRevenue('subscription', 49, 'USD');
+
+// Runtime consent control (in-memory; no device storage)
+umSetEnabled(false);   // opt-out: stop all tracking + the recorder
+umSetEnabled(true);    // opt back in
+
+// On-demand recorder (use with `recorderAutoLoad: false` for opt-in replays)
+umLoadRecorder();      // load recorder.js after explicit consent
+umUnloadRecorder();    // best-effort removal on revoke
 ```
 
 ### Fork changes vs upstream v3.2.1

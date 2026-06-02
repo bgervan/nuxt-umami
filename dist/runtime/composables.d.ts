@@ -1,5 +1,11 @@
 import type { CurrencyCode, EventData, FetchResult } from '../types.js';
 /**
+ * Enable/disable all Umami tracking at runtime, in memory (no localStorage, so it
+ * doesn't add device storage). Use it to honor a cookie-consent opt-out:
+ * `umSetEnabled(false)` stops pageviews, events, identify and the recorder.
+ */
+declare function umSetEnabled(enabled: boolean): void;
+/**
  * Track page views
  *
  * Both params are optional and will be automatically inferred
@@ -46,4 +52,13 @@ declare function umIdentify(sessionData?: EventData): FetchResult;
  */
 declare function umTrackRevenue(eventName: string, revenue: number, currency?: CurrencyCode): FetchResult;
 declare function startPerformanceTracking(): () => void;
-export { startPerformanceTracking, umIdentify, umTrackEvent, umTrackRevenue, umTrackView };
+/**
+ * Load Umami's `recorder.js` (heatmaps / session replays) **on demand** — call it
+ * after the user has given (explicit) consent. Idempotent, client-only, and gated
+ * by `runPreflight()` so it respects `umSetEnabled(false)`, the `umami.disabled`
+ * flag and domain rules. No-op unless `heatmap`/`replays` are enabled in config.
+ */
+declare function umLoadRecorder(): boolean;
+/** Remove the recorder.js script (best-effort; recording may continue until reload). */
+declare function umUnloadRecorder(): void;
+export { startPerformanceTracking, umIdentify, umLoadRecorder, umSetEnabled, umTrackEvent, umTrackRevenue, umTrackView, umUnloadRecorder, };

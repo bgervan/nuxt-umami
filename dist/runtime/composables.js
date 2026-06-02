@@ -7,9 +7,15 @@ let staticPayload;
 let queryRef;
 let queryRefConsumed = false;
 let identifyId;
+let trackingEnabled = true;
+function umSetEnabled(enabled) {
+  trackingEnabled = enabled !== false;
+}
 function runPreflight() {
   if (typeof window === "undefined")
     return "ssr";
+  if (!trackingEnabled)
+    return "disabled";
   if (window.localStorage.getItem("umami.disabled") === "1")
     return "local-storage";
   if (configChecks)
@@ -253,4 +259,41 @@ function startPerformanceTracking() {
   document.addEventListener("visibilitychange", onHide);
   return flush;
 }
-export { startPerformanceTracking, umIdentify, umTrackEvent, umTrackRevenue, umTrackView };
+let recorderLoaded = false;
+function umLoadRecorder() {
+  if (typeof window === "undefined")
+    return false;
+  if (runPreflight() !== true)
+    return false;
+  const { recorder } = useRuntimeConfig().public.umami;
+  if (!recorder)
+    return false;
+  if (recorderLoaded || document.querySelector("script[data-umami-recorder]")) {
+    recorderLoaded = true;
+    return true;
+  }
+  const script = document.createElement("script");
+  script.async = true;
+  script.src = recorder.src;
+  script.dataset.websiteId = recorder.id;
+  script.setAttribute("data-umami-recorder", "");
+  document.head.appendChild(script);
+  recorderLoaded = true;
+  return true;
+}
+function umUnloadRecorder() {
+  if (typeof window === "undefined")
+    return;
+  document.querySelectorAll("script[data-umami-recorder]").forEach((el) => el.remove());
+  recorderLoaded = false;
+}
+export {
+  startPerformanceTracking,
+  umIdentify,
+  umLoadRecorder,
+  umSetEnabled,
+  umTrackEvent,
+  umTrackRevenue,
+  umTrackView,
+  umUnloadRecorder
+};

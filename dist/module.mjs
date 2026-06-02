@@ -204,7 +204,7 @@ const module = defineNuxtModule({
         logErrors: publicConfig.logErrors
       }
     });
-    const composables = ["umTrackEvent", "umTrackView", "umIdentify", "umTrackRevenue"];
+    const composables = ["umTrackEvent", "umTrackView", "umIdentify", "umTrackRevenue", "umSetEnabled", "umLoadRecorder", "umUnloadRecorder"];
     addImports(composables.map((name2) => {
       return {
         name: name2,

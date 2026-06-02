@@ -98,6 +98,17 @@ type ModuleOptions = Partial<{
    */
   replays: boolean;
   /**
+   * Auto-load the Umami `recorder.js` (heatmaps/replays) on page load when
+   * `heatmap`/`replays` is enabled.
+   *
+   * Set to **`false`** to load it **on demand** instead — call `umLoadRecorder()`
+   * yourself *after* the user has given explicit consent. **Required for `replays`**,
+   * which needs opt-in consent (recorder.js cannot be cloaked and records the session).
+   *
+   * @default true
+   */
+  recorderAutoLoad: boolean;
+  /**
    * Enable warning and error logs in production
    *
    * @default false

@@ -19,10 +19,27 @@ let staticPayload: StaticPayload | undefined;
 let queryRef: string | undefined;
 let queryRefConsumed = false;
 let identifyId: string | undefined;
+// In-memory runtime kill-switch (NO device storage). Toggle via umSetEnabled() —
+// e.g. from a cookie-consent modal — to stop all tracking + the recorder at runtime.
+// Resets to enabled on reload; the host app re-applies its stored consent state.
+let trackingEnabled = true;
+
+/**
+ * Enable/disable all Umami tracking at runtime, in memory (no localStorage, so it
+ * doesn't add device storage). Use it to honor a cookie-consent opt-out:
+ * `umSetEnabled(false)` stops pageviews, events, identify and the recorder.
+ */
+function umSetEnabled(enabled: boolean): void {
+  trackingEnabled = enabled !== false;
+}
 
 function runPreflight(): PreflightResult {
   if (typeof window === 'undefined')
     return 'ssr';
+
+  // Runtime kill-switch (in-memory; set by the host app, e.g. on consent opt-out)
+  if (!trackingEnabled)
+    return 'disabled';
 
   // Disable tracking when umami.disabled=1 in localStorage
   if (window.localStorage.getItem('umami.disabled') === '1')
@@ -389,4 +406,56 @@ function startPerformanceTracking(): () => void {
   return flush;
 }
 
-export { startPerformanceTracking, umIdentify, umTrackEvent, umTrackRevenue, umTrackView };
+let recorderLoaded = false;
+
+/**
+ * Load Umami's `recorder.js` (heatmaps / session replays) **on demand** — call it
+ * after the user has given (explicit) consent. Idempotent, client-only, and gated
+ * by `runPreflight()` so it respects `umSetEnabled(false)`, the `umami.disabled`
+ * flag and domain rules. No-op unless `heatmap`/`replays` are enabled in config.
+ */
+function umLoadRecorder(): boolean {
+  if (typeof window === 'undefined')
+    return false;
+
+  if (runPreflight() !== true)
+    return false;
+
+  const { recorder } = useRuntimeConfig().public.umami;
+  if (!recorder)
+    return false;
+
+  if (recorderLoaded || document.querySelector('script[data-umami-recorder]')) {
+    recorderLoaded = true;
+    return true;
+  }
+
+  const script = document.createElement('script');
+  script.async = true;
+  script.src = recorder.src;
+  script.dataset.websiteId = recorder.id;
+  script.setAttribute('data-umami-recorder', '');
+  document.head.appendChild(script);
+  recorderLoaded = true;
+  return true;
+}
+
+/** Remove the recorder.js script (best-effort; recording may continue until reload). */
+function umUnloadRecorder(): void {
+  if (typeof window === 'undefined')
+    return;
+
+  document.querySelectorAll('script[data-umami-recorder]').forEach(el => el.remove());
+  recorderLoaded = false;
+}
+
+export {
+  startPerformanceTracking,
+  umIdentify,
+  umLoadRecorder,
+  umSetEnabled,
+  umTrackEvent,
+  umTrackRevenue,
+  umTrackView,
+  umUnloadRecorder,
+};

@@ -1,26 +1,17 @@
 import { defineNuxtPlugin, useRouter, useRuntimeConfig } from "#app";
-import { useHead } from "#imports";
-import { startPerformanceTracking, umTrackView } from "./composables.js";
+import { startPerformanceTracking, umLoadRecorder, umTrackView } from "./composables.js";
 import { directive } from "./directive.js";
 export default defineNuxtPlugin({
   name: "umami-tracker",
   parallel: true,
   async setup(nuxtApp) {
-    const { useDirective, autoTrack, performance, recorder } = useRuntimeConfig().public.umami;
+    const { useDirective, autoTrack, performance, recorder, recorderAutoLoad } = useRuntimeConfig().public.umami;
     if (useDirective)
       nuxtApp.vueApp.directive("umami", directive);
     if (performance)
       startPerformanceTracking();
-    if (recorder) {
-      useHead({
-        script: [{
-          key: "umami-recorder",
-          src: recorder.src,
-          defer: true,
-          "data-website-id": recorder.id
-        }]
-      });
-    }
+    if (recorder && recorderAutoLoad)
+      umLoadRecorder();
     if (autoTrack) {
       let lastTrackedPath;
       let pendingTimer;

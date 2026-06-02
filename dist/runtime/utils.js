@@ -27,6 +27,7 @@ function normalizeConfig(options = {}) {
     performance = false,
     heatmap = false,
     replays = false,
+    recorderAutoLoad = true,
     tag = void 0,
     excludeQueryParams = false,
     trailingSlash = "any",
@@ -67,6 +68,7 @@ function normalizeConfig(options = {}) {
     performance: performance === true,
     heatmap: heatmap === true,
     replays: replays === true,
+    recorderAutoLoad: recorderAutoLoad !== false,
     enabled: enabled !== false
   };
 }

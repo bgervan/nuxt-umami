@@ -5,6 +5,7 @@ const warnings = {
   "domain": { level: "info", text: "Tracking is disabled for this domain because it is not in the allowed domain config." },
   "localhost": { level: "info", text: "Tracking disabled on localhost" },
   "local-storage": { level: "info", text: "Tracking disabled via local-storage" },
+  "disabled": { level: "info", text: "Tracking disabled at runtime via umSetEnabled(false)" },
   "collect": { level: "error", text: "Uhm... Something went wrong and I have no clue." },
   "directive": { level: "error", text: "Invalid v-umami directive value. Expected string or object with {key:value} pairs. See https://umami.nuxt.dev/api/usage#directive" },
   "event-name": { level: "warn", text: "An Umami track event was fired without a name. `#unknown-event` will be used as event name." },
