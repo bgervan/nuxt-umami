@@ -134,6 +134,9 @@ umTrackRevenue('subscription', 49, 'USD');
 | Structured logging | Module setup uses `useLogger` from `@nuxt/kit` instead of `console.warn` |
 | Proxy validator | Body key-count check removed; forward-compatible with Umami API additions |
 | Runtime env vars | Config moved to Nuxt `runtimeConfig`; `NUXT_PUBLIC_UMAMI_*` / `NUXT_UMAMI_*` override at server start, not build time |
+| `performance` option | Core Web Vitals — LCP/FCP/CLS/INP/TTFB (Umami v3.1.0+) |
+| **`heatmap` option** *(this fork)* | Loads Umami `recorder.js` for click + scroll heatmaps (Umami v3.1.0+) |
+| **`replays` option** *(this fork)* | Umami session replays via the same `recorder.js` (Umami v3.1.0+) |
 
 ---
 
@@ -143,15 +146,15 @@ Use this prompt when setting up this module in a new project:
 
 ---
 
-> Install the `colinmollenhour/nuxt-umami` fork of the nuxt-umami module. This is a
-> fork of [ijkml/nuxt-umami](https://github.com/ijkml/nuxt-umami) with additional bug
-> fixes; the full API and configuration docs are at https://umami.nuxt.dev/ but
-> installation differs from the official docs.
+> Install the `bgervan/nuxt-umami` fork of the nuxt-umami module. This is a fork of
+> [ijkml/nuxt-umami](https://github.com/ijkml/nuxt-umami) adding distinct-ID identify,
+> Core Web Vitals, and Umami heatmaps/replays; the full API and configuration docs are at
+> https://umami.nuxt.dev/ but installation differs from the official docs.
 >
 > **Install from the release tarball** (the only supported method — `npx nuxi module add`
 > and `github:` installs do not work for this fork):
 > ```sh
-> pnpm add https://github.com/colinmollenhour/nuxt-umami/releases/download/v3.4.0/nuxt-umami-v3.4.0.tgz
+> pnpm add https://github.com/bgervan/nuxt-umami/releases/download/v3.4.0/nuxt-umami-3.4.0.tgz
 > ```
 >
 > **Register in `nuxt.config.ts`:**
