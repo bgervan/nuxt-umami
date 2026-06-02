@@ -84,6 +84,20 @@ type ModuleOptions = Partial<{
    */
   heatmap: boolean;
   /**
+   * Load Umami's `recorder.js` to enable **session replays**.
+   *
+   * Requires self-hosted Umami **v3.1.0+**, and Replays must be enabled for the
+   * website in the Umami dashboard (Websites → Edit → Replays & Heatmaps), where
+   * sample rate, mask level, max duration and block selector are configured.
+   *
+   * Shares the same `recorder.js` as {@link heatmap} — enabling either loads it
+   * once; the dashboard decides what is recorded. Like the recorder generally, it
+   * carries the host + website id and cannot be used with `proxy: 'cloak'` hiding.
+   *
+   * @default false
+   */
+  replays: boolean;
+  /**
    * Enable warning and error logs in production
    *
    * @default false
