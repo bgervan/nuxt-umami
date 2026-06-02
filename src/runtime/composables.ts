@@ -389,4 +389,55 @@ function startPerformanceTracking(): () => void {
   return flush;
 }
 
-export { startPerformanceTracking, umIdentify, umTrackEvent, umTrackRevenue, umTrackView };
+let recorderLoaded = false;
+
+/**
+ * Load Umami's `recorder.js` (heatmaps) **on demand** — call it after the user has
+ * given consent. Idempotent, client-only, and gated by `runPreflight()` so it
+ * respects the `umami.disabled` flag and domain rules. No-op unless `heatmap` is
+ * enabled in config.
+ */
+function umLoadRecorder(): boolean {
+  if (typeof window === 'undefined')
+    return false;
+
+  if (runPreflight() !== true)
+    return false;
+
+  const { recorder } = useRuntimeConfig().public.umami;
+  if (!recorder)
+    return false;
+
+  if (recorderLoaded || document.querySelector('script[data-umami-recorder]')) {
+    recorderLoaded = true;
+    return true;
+  }
+
+  const script = document.createElement('script');
+  script.async = true;
+  script.src = recorder.src;
+  script.dataset.websiteId = recorder.id;
+  script.setAttribute('data-umami-recorder', '');
+  document.head.appendChild(script);
+  recorderLoaded = true;
+  return true;
+}
+
+/** Remove the recorder.js script (best-effort; recording may continue until reload). */
+function umUnloadRecorder(): void {
+  if (typeof window === 'undefined')
+    return;
+
+  document.querySelectorAll('script[data-umami-recorder]').forEach(el => el.remove());
+  recorderLoaded = false;
+}
+
+export {
+  startPerformanceTracking,
+  umIdentify,
+  umLoadRecorder,
+  umTrackEvent,
+  umTrackRevenue,
+  umTrackView,
+  umUnloadRecorder,
+};

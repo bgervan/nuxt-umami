@@ -40,6 +40,8 @@ function normalizeConfig(options: ModuleOptions = {}): NormalizedModuleOptions {
     logErrors = false,
     enabled = true,
     performance = false,
+    heatmap = false,
+    recorderAutoLoad = true,
     tag = undefined,
     excludeQueryParams = false,
     trailingSlash = 'any',
@@ -85,6 +87,8 @@ function normalizeConfig(options: ModuleOptions = {}): NormalizedModuleOptions {
     useDirective: useDirective === true,
     logErrors: logErrors === true,
     performance: performance === true,
+    heatmap: heatmap === true,
+    recorderAutoLoad: recorderAutoLoad !== false,
     enabled: enabled !== false,
   };
 }

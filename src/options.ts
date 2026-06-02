@@ -70,6 +70,28 @@ type ModuleOptions = Partial<{
    */
   performance: boolean;
   /**
+   * Load Umami's `recorder.js` to enable **heatmaps** (click + scroll maps).
+   *
+   * Requires self-hosted Umami **v3.1.0+**, and Heatmaps must be enabled for the
+   * website in the Umami dashboard (Websites → Edit → Replays & Heatmaps), where
+   * the sample rate is also configured.
+   *
+   * Note: `recorder.js` loads from your Umami host and carries the website id, so
+   * enabling it exposes both in the page even in `proxy: 'cloak'` mode (the
+   * recorder cannot be cloaked).
+   *
+   * @default false
+   */
+  heatmap: boolean;
+  /**
+   * Auto-load the Umami `recorder.js` (heatmaps) on page load when `heatmap` is
+   * enabled. Set to **`false`** to load it on demand instead via `umLoadRecorder()`
+   * — e.g. only after the user has given consent.
+   *
+   * @default true
+   */
+  recorderAutoLoad: boolean;
+  /**
    * Enable warning and error logs in production
    *
    * @default false

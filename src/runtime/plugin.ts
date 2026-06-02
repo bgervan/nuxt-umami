@@ -1,18 +1,24 @@
 import { defineNuxtPlugin, useRouter, useRuntimeConfig } from '#app';
-import { startPerformanceTracking, umTrackView } from './composables';
+import { startPerformanceTracking, umLoadRecorder, umTrackView } from './composables';
 import { directive } from './directive';
 
 export default defineNuxtPlugin({
   name: 'umami-tracker',
   parallel: true,
   async setup(nuxtApp) {
-    const { useDirective, autoTrack, performance } = useRuntimeConfig().public.umami;
+    const { useDirective, autoTrack, performance, recorder, recorderAutoLoad } = useRuntimeConfig().public.umami;
 
     if (useDirective)
       nuxtApp.vueApp.directive('umami', directive);
 
     if (performance)
       startPerformanceTracking();
+
+    // Heatmaps (Umami recorder.js). Auto-loaded by default; set `recorderAutoLoad:
+    // false` to load it on demand via umLoadRecorder() (e.g. after consent).
+    // umLoadRecorder() is client-only, so it no-ops here during SSR.
+    if (recorder && recorderAutoLoad)
+      umLoadRecorder();
 
     if (autoTrack) {
       // Track the last path we fired a pageview for so that apps using nested

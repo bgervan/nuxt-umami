@@ -45,6 +45,7 @@ export default defineNuxtConfig({
     host: 'https://my-umami.xyz',
     autoTrack: true,
     // enabled: false,
+    // heatmap: true,
     // useDirective: true,
     // ignoreLocalhost: true,
     // domains: ['cool-site.app', 'my-space.site'],
