@@ -46,6 +46,7 @@ export default defineNuxtConfig({
     autoTrack: true,
     // enabled: false,
     // heatmap: true,
+    // replays: true,
     // useDirective: true,
     // ignoreLocalhost: true,
     // domains: ['cool-site.app', 'my-space.site'],

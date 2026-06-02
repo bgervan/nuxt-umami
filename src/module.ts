@@ -67,7 +67,7 @@ export default defineNuxtModule<ModuleOptions>({
     // Umami `recorder.js` (heatmaps) — loaded client-side when enabled. It always
     // carries the real host + website id (it cannot be cloaked), so it is computed
     // from the build-time host/id and exposed regardless of proxy mode.
-    const recorder = runtimeOptions.heatmap && host && id
+    const recorder = (runtimeOptions.heatmap || runtimeOptions.replays) && host && id
       ? { src: new URL(host).origin + '/recorder.js', id }
       : null;
 

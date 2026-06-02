@@ -41,6 +41,7 @@ function normalizeConfig(options: ModuleOptions = {}): NormalizedModuleOptions {
     enabled = true,
     performance = false,
     heatmap = false,
+    replays = false,
     recorderAutoLoad = true,
     tag = undefined,
     excludeQueryParams = false,
@@ -88,6 +89,7 @@ function normalizeConfig(options: ModuleOptions = {}): NormalizedModuleOptions {
     logErrors: logErrors === true,
     performance: performance === true,
     heatmap: heatmap === true,
+    replays: replays === true,
     recorderAutoLoad: recorderAutoLoad !== false,
     enabled: enabled !== false,
   };
