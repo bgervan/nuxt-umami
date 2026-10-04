@@ -76,8 +76,7 @@ function getPayload() {
     ...identifyId ? { id: identifyId } : null,
     url,
     title,
-    referrer: ref,
-    ...identity ? { id: identity } : null
+    referrer: ref
   };
 }
 ;
@@ -242,6 +241,8 @@ function startPerformanceTracking() {
       } catch {
       }
     }
+    if (runPreflight() !== true)
+      return;
     collect({
       type: "performance",
       payload: {

@@ -123,7 +123,6 @@ function getPayload(): ViewPayload {
     url,
     title,
     referrer: ref,
-    ...(identity ? { id: identity } : null),
   };
 };
 
@@ -386,6 +385,12 @@ function startPerformanceTracking(): () => void {
       }
       catch {}
     }
+
+    // Re-check at send time, not only at start: the module plugin starts this before the host app has
+    // applied a persisted opt-out (`umSetEnabled(false)`), and a visitor can opt out mid-page. Without
+    // this, the Web Vitals of an opted-out visitor were still sent on flush.
+    if (runPreflight() !== true)
+      return;
 
     collect({
       type: 'performance',
