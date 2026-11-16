@@ -11,6 +11,9 @@ declare const _default: _nuxt_schema.NuxtModule<Partial<{
     tag: string | null;
     useDirective: boolean;
     performance: boolean;
+    errors: boolean;
+    release: string | null;
+    environment: string | null;
     heatmap: boolean;
     replays: boolean;
     recorderAutoLoad: boolean;
@@ -34,6 +37,9 @@ declare const _default: _nuxt_schema.NuxtModule<Partial<{
     tag: string | null;
     useDirective: boolean;
     performance: boolean;
+    errors: boolean;
+    release: string | null;
+    environment: string | null;
     heatmap: boolean;
     replays: boolean;
     recorderAutoLoad: boolean;

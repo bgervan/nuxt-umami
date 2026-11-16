@@ -1,5 +1,6 @@
 import { buildPathUrl, collect } from "#build/umami.config.mjs";
 import { useRuntimeConfig } from "#imports";
+import { errorPagePath, occurrenceId, scrubErrorTags, scrubErrorText } from "./error-utils.js";
 import { logger } from "./logger.js";
 import { earlyPromise, flattenObject, isValidString } from "./utils.js";
 let configChecks;
@@ -260,6 +261,112 @@ function startPerformanceTracking() {
   document.addEventListener("visibilitychange", onHide);
   return flush;
 }
+const ERRORS_PER_MINUTE = 20;
+const MAX_ERROR_BYTES = 48e3;
+const seenErrors = /* @__PURE__ */ new WeakMap();
+let errorBucket = 0;
+let errorCount = 0;
+let errorsReady = false;
+const pendingErrors = [];
+function sendError(payload) {
+  if (runPreflight() !== true)
+    return;
+  const load = { type: "error", payload };
+  if (new TextEncoder().encode(JSON.stringify(load)).byteLength > MAX_ERROR_BYTES)
+    return;
+  void collect(load);
+}
+function releaseErrors() {
+  errorsReady = true;
+  for (const payload of pendingErrors.splice(0))
+    sendError(payload);
+}
+function captureError(error, options = {}, handled = true) {
+  try {
+    const config = useRuntimeConfig().public.umami;
+    if (!config.errors)
+      return;
+    const check = runPreflight();
+    if (check !== true) {
+      if (check !== "ssr")
+        logger(check);
+      return;
+    }
+    const now = Date.now();
+    const minute = Math.floor(now / 6e4);
+    if (errorBucket !== minute) {
+      errorBucket = minute;
+      errorCount = 0;
+    }
+    if (errorCount >= ERRORS_PER_MINUTE)
+      return;
+    if (error && typeof error === "object") {
+      if (now - (seenErrors.get(error) || 0) < 1e3)
+        return;
+      seenErrors.set(error, now);
+    }
+    errorCount++;
+    const value = error && typeof error === "object" ? error : null;
+    const message = typeof value?.message === "string" ? value.message : typeof error === "string" ? error : "Non-Error exception";
+    const { screen, language } = getStaticPayload();
+    const payload = {
+      version: 1,
+      eventId: occurrenceId(),
+      timestamp: now,
+      name: scrubErrorText(typeof value?.name === "string" ? value.name : "Error", 200) || "Error",
+      message: scrubErrorText(message),
+      stack: scrubErrorText(typeof value?.stack === "string" ? value.stack : "", 16e3),
+      handled,
+      url: errorPagePath(window.location.href),
+      release: scrubErrorText(options.release || config.release || "", 100),
+      environment: scrubErrorText(options.environment || config.environment || "production", 50),
+      tags: scrubErrorTags(options.tags),
+      ...options.fingerprint?.length ? { fingerprint: options.fingerprint.slice(0, 5).map((v) => scrubErrorText(String(v), 200)).filter(Boolean) } : null,
+      ...identifyId ? { id: identifyId } : null,
+      screen,
+      language
+    };
+    if (payload.fingerprint && !payload.fingerprint.length)
+      delete payload.fingerprint;
+    if (errorsReady)
+      sendError(payload);
+    else if (pendingErrors.length < ERRORS_PER_MINUTE)
+      pendingErrors.push(payload);
+  } catch {
+  }
+}
+function umCaptureException(error, options) {
+  captureError(error, options, true);
+}
+function isExpectedHttpError(error) {
+  const code = error?.statusCode;
+  return typeof code === "number" && code < 500;
+}
+function startErrorTracking() {
+  if (typeof window === "undefined")
+    return;
+  window.addEventListener("error", (event) => {
+    if (!event.message)
+      return;
+    captureError(
+      event.error || {
+        name: "Error",
+        message: event.message,
+        stack: event.filename ? `at ${event.filename}:${event.lineno}:${event.colno}` : ""
+      },
+      {},
+      false
+    );
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    if (!isExpectedHttpError(event.reason))
+      captureError(event.reason, {}, false);
+  });
+}
+function captureFrameworkError(error, source) {
+  if (!isExpectedHttpError(error))
+    captureError(error, { tags: { source } }, false);
+}
 let recorderLoaded = false;
 function umLoadRecorder() {
   if (typeof window === "undefined")
@@ -289,7 +396,11 @@ function umUnloadRecorder() {
   recorderLoaded = false;
 }
 export {
+  captureFrameworkError,
+  releaseErrors,
+  startErrorTracking,
   startPerformanceTracking,
+  umCaptureException,
   umIdentify,
   umLoadRecorder,
   umSetEnabled,

@@ -1,18 +1,37 @@
 import { defineNuxtPlugin, useRouter, useRuntimeConfig } from '#app';
-import { startPerformanceTracking, umLoadRecorder, umTrackView } from './composables';
+import {
+  captureFrameworkError,
+  releaseErrors,
+  startErrorTracking,
+  startPerformanceTracking,
+  umLoadRecorder,
+  umTrackView,
+} from './composables';
 import { directive } from './directive';
 
 export default defineNuxtPlugin({
   name: 'umami-tracker',
   parallel: true,
   async setup(nuxtApp) {
-    const { useDirective, autoTrack, performance, recorder, recorderAutoLoad } = useRuntimeConfig().public.umami;
+    const { useDirective, autoTrack, performance, errors, recorder, recorderAutoLoad } = useRuntimeConfig().public.umami;
 
     if (useDirective)
       nuxtApp.vueApp.directive('umami', directive);
 
     if (performance)
       startPerformanceTracking();
+
+    // Error tracking (Umami v3.5+). Listeners start now so early errors are seen;
+    // they are held until `app:created` (after every plugin, so after the host app
+    // applied its consent state) and only then sent through the usual preflight.
+    // Vue/Nuxt catch component and plugin errors themselves, so those never reach
+    // `window`: they come in through `vue:error` / `app:error` instead.
+    if (errors && import.meta.client) {
+      startErrorTracking();
+      nuxtApp.hook('vue:error', error => captureFrameworkError(error, 'vue'));
+      nuxtApp.hook('app:error', error => captureFrameworkError(error, 'nuxt'));
+      nuxtApp.hook('app:created', releaseErrors);
+    }
 
     // Heatmaps / session replays (Umami recorder.js). Auto-loaded by default; set
     // `recorderAutoLoad: false` to load it on demand via umLoadRecorder() AFTER

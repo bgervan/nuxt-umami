@@ -70,6 +70,31 @@ type ModuleOptions = Partial<{
    */
   performance: boolean;
   /**
+   * Capture JavaScript errors from the browser and report them to Umami's
+   * **Errors** tab: uncaught exceptions, unhandled promise rejections and errors
+   * Nuxt/Vue catch (`vue:error`, `app:error`; HTTP errors below 500 are skipped).
+   * Report errors your own code catches with `umCaptureException()`.
+   *
+   * Requires Umami **v3.5.0** or later. Gated like every other call: it respects
+   * `umSetEnabled(false)`, `ignoreLocalhost`, `domains` and `umami.disabled`.
+   *
+   * @default false
+   */
+  errors: boolean;
+  /**
+   * Release label sent with every error (e.g. `web@1.4.2` or a commit SHA), used
+   * as a filter in Umami. Max 100 characters.
+   *
+   * @default ''
+   */
+  release: string | null;
+  /**
+   * Environment label sent with every error. Max 50 characters.
+   *
+   * @default 'production'
+   */
+  environment: string | null;
+  /**
    * Load Umami's `recorder.js` to enable **heatmaps** (click + scroll maps).
    *
    * Requires self-hosted Umami **v3.1.0+**, and Heatmaps must be enabled for the
