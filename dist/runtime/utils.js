@@ -25,6 +25,9 @@ function normalizeConfig(options = {}) {
     logErrors = false,
     enabled = true,
     performance = false,
+    errors = false,
+    release = null,
+    environment = null,
     heatmap = false,
     replays = false,
     recorderAutoLoad = true,
@@ -66,6 +69,9 @@ function normalizeConfig(options = {}) {
     useDirective: useDirective === true,
     logErrors: logErrors === true,
     performance: performance === true,
+    errors: errors === true,
+    release: isValidString(release) ? release.trim().slice(0, 100) : "",
+    environment: isValidString(environment) ? environment.trim().slice(0, 50) : "production",
     heatmap: heatmap === true,
     replays: replays === true,
     recorderAutoLoad: recorderAutoLoad !== false,
@@ -111,7 +117,7 @@ const _payloadProps = {
   id: "skip"
   // optional, distinct user ID in IdentifyPayload (Umami v2.18.0+)
 };
-const _payloadType = ["event", "identify", "performance"];
+const _payloadType = ["event", "identify", "performance", "error"];
 const _bodyProps = ["cache", "payload", "type"];
 function isValidPayload(obj) {
   if (!isRecord(obj))
@@ -161,6 +167,12 @@ function isValidPerformancePayload(obj) {
   const required = ["hostname", "language", "screen", "url", ..._perfNumericKeys];
   return required.every((k) => k in obj) && _perfNumericKeys.every((k) => typeof obj[k] === "number") && isValidString(obj.hostname);
 }
+function isValidErrorPayload(obj) {
+  if (!isRecord(obj))
+    return false;
+  const o = obj;
+  return o.version === 1 && isValidString(o.eventId) && typeof o.timestamp === "number" && isValidString(o.name) && typeof o.message === "string" && typeof o.url === "string" && typeof o.handled === "boolean" && !("website" in o);
+}
 function parseEventBody(body) {
   const error = {
     success: false,
@@ -174,6 +186,11 @@ function parseEventBody(body) {
   const { payload, cache, type } = body;
   if (!includes(_payloadType, type))
     return error;
+  if (type === "error") {
+    if (!isValidErrorPayload(payload))
+      return error;
+    return { success: true, output: { type, cache, payload } };
+  }
   if (type === "performance") {
     if (!isValidPerformancePayload(payload))
       return error;

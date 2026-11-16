@@ -1,5 +1,6 @@
 import type { ModuleOptions } from '../options';
 import type {
+  ErrorPayload,
   EventPayload,
   FetchResult,
   NormalizedModuleOptions,
@@ -40,6 +41,9 @@ function normalizeConfig(options: ModuleOptions = {}): NormalizedModuleOptions {
     logErrors = false,
     enabled = true,
     performance = false,
+    errors = false,
+    release = null,
+    environment = null,
     heatmap = false,
     replays = false,
     recorderAutoLoad = true,
@@ -88,6 +92,9 @@ function normalizeConfig(options: ModuleOptions = {}): NormalizedModuleOptions {
     useDirective: useDirective === true,
     logErrors: logErrors === true,
     performance: performance === true,
+    errors: errors === true,
+    release: isValidString(release) ? release.trim().slice(0, 100) : '',
+    environment: isValidString(environment) ? environment.trim().slice(0, 50) : 'production',
     heatmap: heatmap === true,
     replays: replays === true,
     recorderAutoLoad: recorderAutoLoad !== false,
@@ -143,7 +150,7 @@ const _payloadProps: Record<keyof Payload, PropertyValidator> = {
   id: 'skip', // optional, distinct user ID in IdentifyPayload (Umami v2.18.0+)
 } as const;
 
-const _payloadType: PayloadTypes = ['event', 'identify', 'performance'];
+const _payloadType: PayloadTypes = ['event', 'identify', 'performance', 'error'];
 const _bodyProps: Array<keyof ServerPayload> = ['cache', 'payload', 'type'];
 
 function isValidPayload(obj: object): obj is Payload {
@@ -219,6 +226,21 @@ function isValidPerformancePayload(obj: object): obj is PerformancePayload {
   );
 }
 
+// Shape check only; Umami validates every field (and its limits) itself.
+function isValidErrorPayload(obj: object): obj is ErrorPayload {
+  if (!isRecord(obj))
+    return false;
+  const o = obj as Record<string, unknown>;
+  return o.version === 1
+    && isValidString(o.eventId)
+    && typeof o.timestamp === 'number'
+    && isValidString(o.name)
+    && typeof o.message === 'string'
+    && typeof o.url === 'string'
+    && typeof o.handled === 'boolean'
+    && !('website' in o);
+}
+
 type ValidatePayloadReturn =
   | { success: true; output: ServerPayload }
   | { success: false; output: unknown };
@@ -247,6 +269,12 @@ function parseEventBody(body: unknown): ValidatePayloadReturn {
 
   if (!includes(_payloadType, type))
     return error;
+
+  if (type === 'error') {
+    if (!isValidErrorPayload(payload))
+      return error;
+    return { success: true, output: { type, cache, payload } };
+  }
 
   if (type === 'performance') {
     if (!isValidPerformancePayload(payload))

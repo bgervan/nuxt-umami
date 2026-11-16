@@ -21,6 +21,9 @@ line. It bundles everything from those forks **plus heatmaps and session replays
   storage) to stop **all** tracking + the recorder on a cookie-consent opt-out
 - ⏯️ **`umLoadRecorder()` / `umUnloadRecorder()` + `recorderAutoLoad: false`** — load the recorder
   **on demand** (after explicit consent) instead of on page load — required for compliant replays
+- 🐞 **`errors`** option + **`umCaptureException()`** — Umami **error tracking** (v3.5.0+): uncaught errors,
+  unhandled rejections and errors Nuxt/Vue catch (`vue:error`, `app:error`; HTTP errors below 500 skipped),
+  labelled with `release` / `environment`. Same payload, redaction and limits as Umami's own tracker
 
 **Inherited from `next-major` / `colinmollenhour`:**
 - 🆔 **Distinct user ID** via `umIdentify(id)` — auto-attached to every later pageview/event (Umami v2.18.0+)
@@ -61,6 +64,9 @@ export default defineNuxtConfig({
     id: 'your-website-id',
     autoTrack: true,
     // performance: true,    // Core Web Vitals (Umami v3.1.0+)
+    // errors: true,         // error tracking (Umami v3.5.0+)
+    // release: 'web@1.4.2', // label errors with the build (optional)
+    // environment: 'production',
     // heatmap: true,        // click + scroll heatmaps via recorder.js (v3.1.0+)
     // replays: true,        // session replays via recorder.js (v3.1.0+)
     // proxy: 'cloak',       // hide your Umami endpoint (incompatible with heatmap/replays)
@@ -69,6 +75,17 @@ export default defineNuxtConfig({
     // domains: ['mysite.com'],
   },
 });
+```
+
+Report errors your own code catches (needs `errors: true`; never throws):
+
+```ts
+try {
+  await checkout();
+}
+catch (error) {
+  umCaptureException(error, { tags: { feature: 'checkout' } });
+}
 ```
 
 Identify logged-in users — the distinct ID is then auto-included on all subsequent calls:
@@ -149,6 +166,7 @@ umUnloadRecorder();    // best-effort removal on revoke
 | `performance` option | Core Web Vitals — LCP/FCP/CLS/INP/TTFB (Umami v3.1.0+) |
 | **`heatmap` option** *(this fork)* | Loads Umami `recorder.js` for click + scroll heatmaps (Umami v3.1.0+) |
 | **`replays` option** *(this fork)* | Umami session replays via the same `recorder.js` (Umami v3.1.0+) |
+| **`errors` option + `umCaptureException()`** *(this fork)* | Umami error tracking (Umami v3.5.0+); `release` / `environment` options label every error |
 
 ---
 

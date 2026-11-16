@@ -1,4 +1,4 @@
-import type { CurrencyCode, EventData, FetchResult } from '../types.js';
+import type { CurrencyCode, ErrorCaptureOptions, EventData, FetchResult } from '../types.js';
 /**
  * Enable/disable all Umami tracking at runtime, in memory (no localStorage, so it
  * doesn't add device storage). Use it to honor a cookie-consent opt-out:
@@ -52,6 +52,24 @@ declare function umIdentify(sessionData?: EventData): FetchResult;
  */
 declare function umTrackRevenue(eventName: string, revenue: number, currency?: CurrencyCode): FetchResult;
 declare function startPerformanceTracking(): () => void;
+/** Release the errors held back until the app started. Called by the module plugin. */
+declare function releaseErrors(): void;
+/**
+ * Report an error your code caught (Umami v3.5+). Needs the `errors` option.
+ * Never throws, so it is safe in any catch block or error handler.
+ *
+ * @param error the caught value, ideally an `Error`
+ * @param options `release` / `environment` overrides, `tags`, `fingerprint`
+ * @see [Umami Docs — Error tracking](https://umami.is/docs/error-tracking)
+ */
+declare function umCaptureException(error: unknown, options?: ErrorCaptureOptions): void;
+/**
+ * Listen for uncaught errors and unhandled rejections on `window`. Nuxt/Vue errors
+ * are wired by the module plugin through `vue:error` / `app:error`.
+ */
+declare function startErrorTracking(): void;
+/** Report an error that Nuxt/Vue caught before it reached `window`. */
+declare function captureFrameworkError(error: unknown, source: string): void;
 /**
  * Load Umami's `recorder.js` (heatmaps / session replays) **on demand** — call it
  * after the user has given (explicit) consent. Idempotent, client-only, and gated
@@ -61,4 +79,4 @@ declare function startPerformanceTracking(): () => void;
 declare function umLoadRecorder(): boolean;
 /** Remove the recorder.js script (best-effort; recording may continue until reload). */
 declare function umUnloadRecorder(): void;
-export { startPerformanceTracking, umIdentify, umLoadRecorder, umSetEnabled, umTrackEvent, umTrackRevenue, umTrackView, umUnloadRecorder, };
+export { captureFrameworkError, releaseErrors, startErrorTracking, startPerformanceTracking, umCaptureException, umIdentify, umLoadRecorder, umSetEnabled, umTrackEvent, umTrackRevenue, umTrackView, umUnloadRecorder, };

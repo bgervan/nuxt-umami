@@ -2,7 +2,9 @@ import type { ModuleOptions } from './options';
 
 // !IMPORTANT: Sync with example.ts
 
-interface _NormalizedOpts extends Required<ModuleOptions> {
+interface _NormalizedOpts extends Required<Omit<ModuleOptions, 'release' | 'environment'>> {
+  release: string;
+  environment: string;
   domains: Array<string> | null;
   customEndpoint: `/${string}` | null;
   urlOptions: Required<Required<ModuleOptions>['urlOptions']>;
@@ -44,7 +46,7 @@ type ModuleMode = 'faux' | 'proxy' | 'direct';
 
 type EventData = Record<string, string | number | boolean> | null;
 
-type PayloadTypes = ['event', 'identify', 'performance'];
+type PayloadTypes = ['event', 'identify', 'performance', 'error'];
 
 interface StaticPayload {
   screen: string;
@@ -81,10 +83,42 @@ interface PerformancePayload extends ViewPayload {
   duration: number;
 }
 
+/** Umami v3.5+ error payload (`type: 'error'`), as Umami's own tracker sends it. */
+interface ErrorPayload {
+  version: 1;
+  eventId: string;
+  timestamp: number;
+  name: string;
+  message: string;
+  stack: string;
+  handled: boolean;
+  /** Page path only: no origin, query or hash. */
+  url: string;
+  release: string;
+  environment: string;
+  tags: Record<string, string>;
+  fingerprint?: string[];
+  id?: string;
+  screen?: string;
+  language?: string;
+}
+
+/** Second argument of `umCaptureException()`. */
+interface ErrorCaptureOptions {
+  /** Overrides the `release` option for this error. */
+  release?: string;
+  /** Overrides the `environment` option for this error. */
+  environment?: string;
+  /** Up to 20 string tags. Keys that look like credentials (`password`, `token`, `email`, …) are dropped. */
+  tags?: Record<string, string>;
+  /** Up to 5 strings that group the error into an issue, replacing automatic grouping. */
+  fingerprint?: string[];
+}
+
 interface ServerPayload {
   cache?: string;
   type: PayloadTypes[number];
-  payload: ViewPayload | EventPayload | PerformancePayload;
+  payload: ViewPayload | EventPayload | PerformancePayload | ErrorPayload;
 };
 
 type FetchResult = Promise<{ ok: boolean }>;
@@ -113,6 +147,8 @@ declare module 'nuxt/schema' {
 export type {
   BuildPathUrlFn,
   CurrencyCode,
+  ErrorCaptureOptions,
+  ErrorPayload,
   EventData,
   EventPayload,
   FetchFn,
